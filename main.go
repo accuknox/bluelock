@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"syscall"
+
+	seccomp "github.com/seccomp/libseccomp-golang"
 )
 
 func main() {
@@ -15,6 +17,35 @@ func main() {
 	var regs syscall.PtraceRegs
 	var ss syscallCounter
 	ss = ss.init()
+
+	// Create a seccomp filter to trace open and openat calls in the ptrace
+	// child process.
+	filter, err := seccomp.NewFilter(seccomp.ActAllow)
+	if err != nil {
+		panic(err)
+	}
+	defer filter.Release()
+
+	// // // Trace only open and openat syscalls
+	// // nropen, _ := seccomp.GetSyscallFromName("open")
+	// // err = filter.AddRule(nropen, seccomp.ActTrace)
+	// // if err != nil {
+	// // 	panic(err)
+	// // }
+	// nropenat, _ := seccomp.GetSyscallFromName("openat")
+	// _ = filter.AddRule(nropenat, seccomp.ActTrace)
+
+	// // // Set no new prriliges bit
+	// // _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, 39, 1, 0, 0, 0, 0)
+	// // if errno != 0 {
+	// // 	panic(errno)
+	// // }
+
+	// Load the filter
+	err = filter.Load()
+	if err != nil {
+		panic(err)
+	}
 
 	fmt.Println("Run: ", os.Args[1:])
 
