@@ -4,11 +4,18 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
+	"runtime"
+	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
+	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	seccomp "github.com/seccomp/libseccomp-golang"
 )
 
@@ -57,6 +64,15 @@ func main() {
 		Ptrace: true,
 	}
 
+	// Extract Container Name
+	// Extract Container ID
+	// pid/ppid  from status
+	// pname from exe
+	// ppname  from ppid/exe
+
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
 	cmd.Start()
 	err = cmd.Wait()
 	if err != nil {
@@ -72,9 +88,19 @@ func main() {
 			if err != nil {
 				break
 			}
-			// name := ss.getName(regs.Orig_rax)
-			// fmt.Printf("name: %s, id: %d \n", name, regs.Orig_rax)
 			ss.inc(regs.Orig_rax)
+			log := tp.Log{}
+			if regs.Orig_rax == 257 {
+				log.PID = int32(pid)
+				log.Timestamp = time.Now().UTC().Unix()
+				log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
+				log.Operation = "File"
+				log.ProcessName, log.PPID, log.UID, log.ParentProcessName, _ = extractProcData(pid)
+				log.Source = log.ProcessName
+				log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+				s, _ := json.MarshalIndent(log, "", "\t")
+				fmt.Print(string(s))
+			}
 		}
 		err = syscall.PtraceSyscall(pid, 0)
 		if err != nil {
@@ -89,4 +115,83 @@ func main() {
 	}
 
 	ss.print()
+}
+
+func extractProcData(pid int) (string, int32, int32, string, error) {
+	// read exe symlink
+	exePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", pid))
+	if err != nil {
+		return "", 0, 0, "", err
+	}
+
+	// read status file
+	statusBytes, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
+	if err != nil {
+		return "", 0, 0, "", err
+	}
+
+	// extract ppid and uid from status
+	statusLines := strings.Split(string(statusBytes), "\n")
+	var ppid int
+	var uid int
+	for _, line := range statusLines {
+		if strings.HasPrefix(line, "PPid:") {
+			ppid, err = strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(line, "PPid:")))
+			if err != nil {
+				return "", 0, 0, "", err
+			}
+		} else if strings.HasPrefix(line, "Uid:") {
+			uidParts := strings.Split(strings.TrimSpace(strings.TrimPrefix(line, "Uid:")), "\t")
+			uid, err = strconv.Atoi(uidParts[0])
+			if err != nil {
+				return "", 0, 0, "", err
+			}
+		}
+	}
+
+	// read ppid exe symlink
+	pExePath, err := os.Readlink(fmt.Sprintf("/proc/%d/exe", ppid))
+	if err != nil {
+		return "", 0, 0, "", err
+	}
+
+	return exePath, int32(ppid), int32(uid), pExePath, nil
+}
+
+func getString(pid int, addr uintptr) string {
+	buff := make([]byte, syscall.PathMax)
+	syscall.PtracePeekData(pid, addr, buff)
+	return string(buff[:clen(buff)])
+}
+
+// getProcCwd gets the process CWD
+func getProcCwd(pid int) string {
+	fileName := "/proc/self/cwd"
+	if pid > 0 {
+		fileName = fmt.Sprintf("/proc/%d/cwd", pid)
+	}
+	s, err := os.Readlink(fileName)
+	if err != nil {
+		return ""
+	}
+	return s
+}
+
+// absPath calculates the absolute path for a process
+// built-in function did the dirty works to resolve relative paths
+func absPath(pid int, p string) string {
+	// if relative path
+	if !path.IsAbs(p) {
+		return path.Join(getProcCwd(pid), p)
+	}
+	return path.Clean(p)
+}
+
+func clen(b []byte) int {
+	for i := 0; i < len(b); i++ {
+		if b[i] == 0 {
+			return i
+		}
+	}
+	return len(b) + 1
 }
