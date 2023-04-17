@@ -4,7 +4,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -56,6 +55,11 @@ func main() {
 
 	fmt.Println("Run: ", os.Args[1:])
 
+	containerID, err := getContainerIDFromCGroup()
+	if err != nil {
+		fmt.Println("Unable to find containerID:", err.Error())
+	}
+
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
 	cmd.Stderr = os.Stderr
 	cmd.Stdout = os.Stdout
@@ -98,8 +102,15 @@ func main() {
 				log.ProcessName, log.PPID, log.UID, log.ParentProcessName, _ = extractProcData(pid)
 				log.Source = log.ProcessName
 				log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
-				s, _ := json.MarshalIndent(log, "", "\t")
-				fmt.Print(string(s))
+
+				// TODO: find a mechanism which works with all cgroup versions
+				// https://docs.docker.com/config/containers/runmetrics/#find-the-cgroup-for-a-given-container
+				log.ContainerID = containerID
+
+				PushLogSidekick(log)
+
+				//s, _ := json.MarshalIndent(log, "", "\t")
+				//fmt.Print(string(s))
 			}
 		}
 		err = syscall.PtraceSyscall(pid, 0)

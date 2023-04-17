@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reader-app
+  labels:
+    deployment: reader-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      container: reader-app
+  template:
+    metadata:
+      labels:
+        container: reader-app
+    spec:
+      containers:
+        - name: reader-app-container
+          image: delusionaloptimist/bluelock:latest
+          imagePullPolicy: Always
+        - name: sidekick-container
+          image: falcosecurity/falcosidekick:latest
+          ports:
+            - name: sidekick-port
+              containerPort: 2801
+          env:
+            - name: "DEBUG"
+              value: "true"
+            - name: "DISCORD_WEBHOOKURL"
+              value: "<your-own-webhook-url>"
+            - name: "DISCORD_MINIMUMPRIORITY"
+              value: "debug"
