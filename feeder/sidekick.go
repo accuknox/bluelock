@@ -1,4 +1,4 @@
-package main
+package feeder
 
 import (
 	"bytes"
@@ -14,17 +14,30 @@ import (
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
 
-var SidekickURL, Hostname string
+// TODO: improve how it is used globally
+type Logger struct {
+	SidekickURL string
+	Hostname string
+}
+
+var SidekickLogger *Logger
 
 func init () {
+	var sidekickURL string
 	var ok bool
-	if SidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
-		SidekickURL = "http://localhost:2801/"
+
+	if sidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
+		sidekickURL = "http://localhost:2801/"
 	}
 	var err error
-	Hostname, err = os.Hostname()
+	hostname, err := os.Hostname()
 	if err != nil {
-		Hostname = "none"
+		hostname = "none"
+	}
+
+	SidekickLogger = &Logger{
+		SidekickURL: sidekickURL,
+		Hostname: hostname,
 	}
 }
 
@@ -67,7 +80,7 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 
 		"ContainerID": kubearmorLog.ContainerID,
 
-		"ContainerName": Hostname,
+		"ContainerName": SidekickLogger.Hostname,
 
 		// HACKS: sidekick will only send logs of type string
 		"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
@@ -95,7 +108,7 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 	payload.OutputFields = outputFields
 
 	// extra to make sidekick work
-	payload.Hostname = Hostname
+	payload.Hostname = SidekickLogger.Hostname
 
 	SendPayload(payload)
 }
@@ -106,7 +119,7 @@ func SendPayload(payload types.FalcoPayload) {
 		log.Println("ERROR: parsing JSON body:", err)
 	}
 
-	resp, err := http.Post(SidekickURL, "application/json", bytes.NewBuffer(body))
+	resp, err := http.Post(SidekickLogger.SidekickURL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Println("ERROR: pushing log:", err.Error())
 		return
