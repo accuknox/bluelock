@@ -57,7 +57,7 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
 	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
+	//cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Ptrace: true,
@@ -111,6 +111,7 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 						regs.Rax = ^uint64(syscall.EPERM)
 						_ = syscall.PtraceSetRegs(pid, &regs)
 						kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
+						log.Action = "Block"
 					}
 				}
 				if val, ok := pe.Rules.FilePaths[InnerKey{
@@ -122,6 +123,7 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 						regs.Rax = ^uint64(syscall.EPERM)
 						_ = syscall.PtraceSetRegs(pid, &regs)
 						kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+						log.Action = "Block"
 
 					}
 				}

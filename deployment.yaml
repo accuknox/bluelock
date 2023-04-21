@@ -18,6 +18,7 @@ spec:
       containers:
         - name: reader-app-container
           image: bluelock:latest
+          #image: ttl.sh/bluelock
           imagePullPolicy: Never
         - name: sidekick-container
           image: falcosecurity/falcosidekick:latest

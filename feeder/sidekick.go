@@ -104,7 +104,13 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 
 	payload.Output = kubearmorLog.Result
 	payload.Rule = "None"
-	payload.Priority = types.Informational
+
+	if kubearmorLog.Action == "Block" {
+		payload.Priority = types.Critical
+	} else {
+		payload.Priority = types.Informational
+	}
+
 	payload.OutputFields = outputFields
 
 	// extra to make sidekick work

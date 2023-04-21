@@ -716,6 +716,9 @@ func (dm *BlueLockDaemon) UpdateSecurityPolicy(action string, secPolicy tp.Secur
 			}
 		}
 	}
+	
+	dm.RuntimeEnforcer.UpdateRules(dm.EndPoint.SecurityPolicies)
+
 
 	/* feeder
 	if cfg.GlobalCfg.Policy {
@@ -846,6 +849,7 @@ func (dm *BlueLockDaemon) WatchSecurityPolicies() *http.Response {
 		//dm.Logger.Err("Couldn't start watching KubeArmor Security Policies")
 		return nil
 	}
+
 
 	go factory.Start(wait.NeverStop)
 	factory.WaitForCacheSync(wait.NeverStop)

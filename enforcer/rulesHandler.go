@@ -1,6 +1,8 @@
 package enforcer
 
 import (
+	"fmt"
+
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
 
@@ -48,6 +50,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy) {
 					Path: path.Path,
 					Source: "",
 				}
+				fmt.Println("I got new rules.")
 				newRules.FilePaths[key] = rc
 			} else {
 				for _, src := range path.FromSource {
@@ -67,4 +70,6 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy) {
 			}
 		}
 	}
+
+	pe.Rules = newRules
 }

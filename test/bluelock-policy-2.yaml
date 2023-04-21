@@ -1,7 +1,7 @@
 apiVersion: security.kubearmor.com/v1
 kind: KubeArmorPolicy
 metadata:
-  name: bluelock-block-open-policy
+  name: bluelock-block-open-policy-2
 spec:
   severity: 10
   message: "a critical file was accessed"
