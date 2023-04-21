@@ -1,4 +1,4 @@
-package monitor
+package enforcer
 
 import (
 	"fmt"
@@ -12,11 +12,12 @@ import (
 	"time"
 
 	"github.com/daemon1024/bluelock/feeder"
+	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	seccomp "github.com/seccomp/libseccomp-golang"
 )
 
-func StartSystemMonitor() {
+func (pe *PtraceEnforcer) StartSystemTracer() {
 	var err error
 	var regs syscall.PtraceRegs
 
@@ -86,7 +87,6 @@ func StartSystemMonitor() {
 			if err != nil {
 				break
 			}
-			//ss.inc(regs.Orig_rax)
 			log := tp.Log{}
 			if regs.Orig_rax == 257 {
 				log.PID = int32(pid)
@@ -101,10 +101,32 @@ func StartSystemMonitor() {
 				// https://docs.docker.com/config/containers/runmetrics/#find-the-cgroup-for-a-given-container
 				//log.ContainerID = containerID
 
-				feeder.PushLogSidekick(log)
+				// Enforcement Logic
+				if val, ok := pe.Rules.FilePaths[InnerKey{
+					Path:   log.Resource,
+					Source: "",
+				}]; ok {
+					if val.Deny {
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = ^uint64(syscall.EPERM)
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
+					}
+				}
+				if val, ok := pe.Rules.FilePaths[InnerKey{
+					Path:   log.Resource,
+					Source: log.Source,
+				}]; ok {
+					if val.Deny {
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = ^uint64(syscall.EPERM)
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
 
-				//s, _ := json.MarshalIndent(log, "", "\t")
-				//fmt.Print(string(s))
+					}
+				}
+
+				feeder.PushLogSidekick(log)
 			}
 		}
 		err = syscall.PtraceSyscall(pid, 0)

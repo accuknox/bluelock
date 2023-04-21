@@ -6,7 +6,6 @@ import (
 
 	"github.com/daemon1024/bluelock/enforcer"
 	"github.com/daemon1024/bluelock/feeder"
-	"github.com/daemon1024/bluelock/monitor"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
@@ -27,7 +26,7 @@ type BlueLockDaemon struct {
 	Container tp.Container
 
 	// Security policies for the container
-	SecurityPolicies []tp.SecurityPolicy
+	SecurityPolicies     []tp.SecurityPolicy
 	SecurityPoliciesLock *sync.RWMutex
 
 	// Sidekick logger
@@ -91,18 +90,18 @@ func BlueLock() {
 	go dm.WatchSecurityPolicies()
 	kg.Printf("Started to monitor security policies")
 
-	go monitor.StartSystemMonitor()
-
 	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer()
+
+	go dm.RuntimeEnforcer.StartSystemTracer()
 
 	// watch default posture
 	/*
-	go dm.WatchDefaultPosture()
-	dm.Logger.Print("Started to monitor per-namespace default posture")
+		go dm.WatchDefaultPosture()
+		dm.Logger.Print("Started to monitor per-namespace default posture")
 
-	// watch kubearmor configmap
-	go dm.WatchConfigMap()
-	dm.Logger.Print("Watching for posture changes")
+		// watch kubearmor configmap
+		go dm.WatchConfigMap()
+		dm.Logger.Print("Watching for posture changes")
 	*/
 
 	// listen for interrupt signals
