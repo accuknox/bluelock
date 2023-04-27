@@ -17,12 +17,12 @@ import (
 // TODO: improve how it is used globally
 type Logger struct {
 	SidekickURL string
-	Hostname string
+	Hostname    string
 }
 
 var SidekickLogger *Logger
 
-func init () {
+func init() {
 	var sidekickURL string
 	var ok bool
 
@@ -37,24 +37,11 @@ func init () {
 
 	SidekickLogger = &Logger{
 		SidekickURL: sidekickURL,
-		Hostname: hostname,
+		Hostname:    hostname,
 	}
 }
 
 func PushLogSidekick(kubearmorLog tp.Log) {
-	if kubearmorLog.Source == "" {
-		return
-	}
-
-	// remove MergedDir
-	kubearmorLog.MergedDir = ""
-
-	// remove flags
-	kubearmorLog.PolicyEnabled = 0
-	kubearmorLog.ProcessVisibilityEnabled = false
-	kubearmorLog.FileVisibilityEnabled = false
-	kubearmorLog.NetworkVisibilityEnabled = false
-	kubearmorLog.CapabilitiesVisibilityEnabled = false
 
 	payload := types.FalcoPayload{}
 
@@ -84,14 +71,14 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 
 		// HACKS: sidekick will only send logs of type string
 		"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
-		"HostPID": fmt.Sprintf("%v", kubearmorLog.HostPID),
+		"HostPID":  fmt.Sprintf("%v", kubearmorLog.HostPID),
 
 		"PPID": fmt.Sprintf("%v", kubearmorLog.PPID),
-		"PID": fmt.Sprintf("%v", kubearmorLog.PID),
-		"UID": fmt.Sprintf("%v", kubearmorLog.UID),
+		"PID":  fmt.Sprintf("%v", kubearmorLog.PID),
+		"UID":  fmt.Sprintf("%v", kubearmorLog.UID),
 
 		"ParentProcessName": kubearmorLog.ParentProcessName,
-		"ProcessName": kubearmorLog.ProcessName,
+		"ProcessName":       kubearmorLog.ProcessName,
 	}
 
 	outputFields["Type"] = "ContainerLog"

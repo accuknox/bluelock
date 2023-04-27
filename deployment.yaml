@@ -17,9 +17,11 @@ spec:
       serviceAccountName: kubearmor
       containers:
         - name: reader-app-container
-          image: bluelock:latest
-          #image: ttl.sh/bluelock
+          # image: bluelock:latest
+          image: ttl.sh/bluelock
           imagePullPolicy: Never
+          ports:
+            - containerPort: 1337
         - name: sidekick-container
           image: falcosecurity/falcosidekick:latest
           ports:

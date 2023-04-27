@@ -1,6 +1,7 @@
 package enforcer
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -55,7 +56,7 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 
 	cmd := exec.Command(os.Args[1], os.Args[2:]...)
 	cmd.Stderr = os.Stderr
-	//cmd.Stdout = os.Stdout
+	cmd.Stdout = os.Stdout
 	cmd.Stdin = os.Stdin
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Ptrace: true,
@@ -70,7 +71,8 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	cmd.Start()
+	err = cmd.Start()
+	// err = cmd.Wait()
 	if err != nil {
 		fmt.Printf("Wait err %v \n", err)
 	}
@@ -145,7 +147,10 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 							log.Timestamp = time.Now().UTC().Unix()
 							log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
 							log.Operation = "File"
-							log.ProcessName, log.PPID, log.UID, log.ParentProcessName, _ = extractProcData(pid)
+							log.ProcessName, log.PPID, log.UID, log.ParentProcessName, err = extractProcData(pid)
+							if err != nil {
+								kg.Warnf("Error extracting process data %v \n", err)
+							}
 							log.Source = log.ProcessName
 							log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
 
@@ -175,6 +180,9 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 
 								}
 							}
+
+							b, _ := json.MarshalIndent(log, "", "  ")
+							fmt.Print(string(b))
 
 							feeder.PushLogSidekick(log)
 						}
