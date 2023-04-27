@@ -12,10 +12,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/criyle/go-sandbox/pkg/forkexec"
+	"github.com/criyle/go-sandbox/pkg/seccomp"
+	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	"github.com/daemon1024/bluelock/feeder"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
-	seccomp "github.com/seccomp/libseccomp-golang"
 	"golang.org/x/sys/unix"
 )
 
@@ -23,43 +25,30 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	var err error
 	var regs syscall.PtraceRegs
 
-	// Create a seccomp filter to trace open and openat calls in the ptrace
-	// child process.
-	filter, err := seccomp.NewFilter(seccomp.ActAllow)
-	if err != nil {
-		panic(err)
+	builder := libseccomp.Builder{
+		Trace: []string{
+			"openat",
+		},
+		Default: libseccomp.ActionAllow,
 	}
-	defer filter.Release()
-
-	// // // Trace only open and openat syscalls
-	// // nropen, _ := seccomp.GetSyscallFromName("open")
-	// // err = filter.AddRule(nropen, seccomp.ActTrace)
-	// // if err != nil {
-	// // 	panic(err)
-	// // }
-	nropenat, _ := seccomp.GetSyscallFromName("openat")
-	_ = filter.AddRule(nropenat, seccomp.ActTrace)
-
-	// // // Set no new prriliges bit
-	// // _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, 39, 1, 0, 0, 0, 0)
-	// // if errno != 0 {
-	// // 	panic(errno)
-	// // }
-
-	// Load the filter
-	err = filter.Load()
+	var filter seccomp.Filter
+	filter, err = builder.Build()
 	if err != nil {
-		panic(err)
+		kg.Errf("Failed to build seccomp filter: %v", err)
 	}
-
 	fmt.Println("Run: ", os.Args[1:])
 
-	cmd := exec.Command(os.Args[1], os.Args[2:]...)
-	cmd.Stderr = os.Stderr
-	cmd.Stdout = os.Stdout
-	cmd.Stdin = os.Stdin
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Ptrace: true,
+	execPath, _ := exec.LookPath(os.Args[1])
+	bin, err := os.Open(execPath)
+	if err != nil {
+		kg.Errf("Failed to open exec file: %v", err)
+	}
+	defer bin.Close()
+	cmd := forkexec.Runner{
+		Args:     os.Args[1:],
+		ExecFile: bin.Fd(),
+		Seccomp:  filter.SockFprog(),
+		Ptrace:   true,
 	}
 
 	// Extract Container Name
@@ -71,14 +60,11 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
-	err = cmd.Start()
+	pgid, err := cmd.Start()
 	// err = cmd.Wait()
 	if err != nil {
 		fmt.Printf("Wait err %v \n", err)
 	}
-
-	pgid := cmd.Process.Pid
-
 	setPtraceOption(pgid)
 
 	execved := false
