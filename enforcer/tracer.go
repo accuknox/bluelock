@@ -15,14 +15,12 @@ import (
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	seccomp "github.com/seccomp/libseccomp-golang"
+	"golang.org/x/sys/unix"
 )
 
 func (pe *PtraceEnforcer) StartSystemTracer() {
 	var err error
 	var regs syscall.PtraceRegs
-
-	//var ss syscallCounter
-	//ss = ss.init()
 
 	// Create a seccomp filter to trace open and openat calls in the ptrace
 	// child process.
@@ -38,8 +36,8 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	// // if err != nil {
 	// // 	panic(err)
 	// // }
-	// nropenat, _ := seccomp.GetSyscallFromName("openat")
-	// _ = filter.AddRule(nropenat, seccomp.ActTrace)
+	nropenat, _ := seccomp.GetSyscallFromName("openat")
+	_ = filter.AddRule(nropenat, seccomp.ActTrace)
 
 	// // // Set no new prriliges bit
 	// // _, _, errno := syscall.Syscall6(syscall.SYS_PRCTL, 39, 1, 0, 0, 0, 0)
@@ -73,77 +71,152 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	defer runtime.UnlockOSThread()
 
 	cmd.Start()
-	err = cmd.Wait()
 	if err != nil {
 		fmt.Printf("Wait err %v \n", err)
 	}
 
-	pid := cmd.Process.Pid
-	exit := true
+	pgid := cmd.Process.Pid
+
+	setPtraceOption(pgid)
+
+	execved := false
+	traced := make(map[int]bool)
+
+	// TODO:
+	// handle processes which won't create a chlid process which leads to execve to be always false
+	// make signals sent to child process work
 
 	for {
-		if exit {
-			err = syscall.PtraceGetRegs(pid, &regs)
-			if err != nil {
-				break
-			}
-			log := tp.Log{}
-			if regs.Orig_rax == 257 {
-				log.PID = int32(pid)
-				log.Timestamp = time.Now().UTC().Unix()
-				log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
-				log.Operation = "File"
-				log.ProcessName, log.PPID, log.UID, log.ParentProcessName, _ = extractProcData(pid)
-				log.Source = log.ProcessName
-				log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+		var pid int
+		var wstatus unix.WaitStatus
 
-				// TODO: find a mechanism which works with all cgroup versions
-				// https://docs.docker.com/config/containers/runmetrics/#find-the-cgroup-for-a-given-container
-				//log.ContainerID = containerID
+		if execved {
+			// Wait for all child in the process group
+			pid, err = unix.Wait4(-1, &wstatus, unix.WALL, nil)
+		} else {
+			// Ensure the process have called setpgid
+			pid, err = unix.Wait4(pgid, &wstatus, unix.WALL, nil)
+		}
+		fmt.Println("pid: ", pid, " wstatus: ", wstatus, " err: ", err, "")
 
-				// Enforcement Logic
-				if val, ok := pe.Rules.FilePaths[InnerKey{
-					Path:   log.Resource,
-					Source: "",
-				}]; ok {
-					if val.Deny {
-						regs.Orig_rax = ^uint64(0)
-						regs.Rax = ^uint64(syscall.EPERM)
-						_ = syscall.PtraceSetRegs(pid, &regs)
-						kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
-						log.Action = "Block"
-					}
+		switch {
+		case wstatus.Exited():
+			delete(traced, pid)
+			if pid == pgid {
+				if execved {
+					break
 				}
-				if val, ok := pe.Rules.FilePaths[InnerKey{
-					Path:   log.Resource,
-					Source: log.Source,
-				}]; ok {
-					if val.Deny {
-						regs.Orig_rax = ^uint64(0)
-						regs.Rax = ^uint64(syscall.EPERM)
-						_ = syscall.PtraceSetRegs(pid, &regs)
-						kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
-						log.Action = "Block"
-
-					}
-				}
-
-				feeder.PushLogSidekick(log)
 			}
-		}
-		err = syscall.PtraceSyscall(pid, 0)
-		if err != nil {
-			panic(err)
-		}
-		_, err = syscall.Wait4(pid, nil, 0, nil)
-		if err != nil {
-			panic(err)
-		}
 
-		exit = !exit
+		case wstatus.Signaled():
+			sig := wstatus.Signal()
+			// if pid == pgid {
+			// 	delete(traced, pid)
+			// 	break
+			// }
+			unix.PtraceCont(pid, int(sig))
+
+		case wstatus.Stopped():
+			// Set option if the process is newly forked
+			if !traced[pid] {
+				traced[pid] = true
+				// Ptrace set option valid if the tracee is stopped
+				if err := setPtraceOption(pid); err != nil {
+					break
+				}
+			}
+
+			stopSig := wstatus.StopSignal()
+			// Check stop signal, if trap then check seccomp
+			switch stopSig {
+			case unix.SIGTRAP:
+				switch trapCause := wstatus.TrapCause(); trapCause {
+				case unix.PTRACE_EVENT_SECCOMP:
+					// syscall tracee have successfully called seccomp
+					fmt.Println("syscall tracee have successfully called seccomp")
+					if execved {
+						err = syscall.PtraceGetRegs(pid, &regs)
+						if err != nil {
+							break
+						}
+						log := tp.Log{}
+						if regs.Orig_rax == 257 {
+							log.PID = int32(pid)
+							log.Timestamp = time.Now().UTC().Unix()
+							log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
+							log.Operation = "File"
+							log.ProcessName, log.PPID, log.UID, log.ParentProcessName, _ = extractProcData(pid)
+							log.Source = log.ProcessName
+							log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+
+							// Enforcement Logic
+							if val, ok := pe.Rules.FilePaths[InnerKey{
+								Path:   log.Resource,
+								Source: "",
+							}]; ok {
+								if val.Deny {
+									regs.Orig_rax = ^uint64(0)
+									regs.Rax = ^uint64(syscall.EPERM)
+									_ = syscall.PtraceSetRegs(pid, &regs)
+									kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
+									log.Action = "Block"
+								}
+							}
+							if val, ok := pe.Rules.FilePaths[InnerKey{
+								Path:   log.Resource,
+								Source: log.Source,
+							}]; ok {
+								if val.Deny {
+									regs.Orig_rax = ^uint64(0)
+									regs.Rax = ^uint64(syscall.EPERM)
+									_ = syscall.PtraceSetRegs(pid, &regs)
+									kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+									log.Action = "Block"
+
+								}
+							}
+
+							feeder.PushLogSidekick(log)
+						}
+					}
+
+				case unix.PTRACE_EVENT_EXEC:
+					// forked tracee have successfully called execve
+					fmt.Println("execve")
+					if !execved {
+						execved = true
+					}
+				case unix.PTRACE_EVENT_VFORK:
+					fmt.Println("vfork")
+					if !execved {
+						execved = true
+					}
+				case unix.PTRACE_EVENT_CLONE:
+					fmt.Println("clone")
+					if !execved {
+						execved = true
+					}
+				case unix.PTRACE_EVENT_EXIT:
+					fmt.Println("exit")
+				case unix.PTRACE_EVENT_FORK:
+					fmt.Println("fork")
+					if !execved {
+						execved = true
+					}
+				default:
+					fmt.Println("ptrace unexpected trap cause: ", trapCause)
+
+				}
+				//unix.PtraceCont(pid, 0)
+
+			default:
+				fmt.Println("syscall stop signal: ", stopSig)
+			}
+			unix.PtraceCont(pid, 0)
+			//default:
+			//	fmt.Println("DEFAULT wstatus:", wstatus)
+		}
 	}
-
-	//ss.print()
 }
 
 func extractProcData(pid int) (string, int32, int32, string, error) {
@@ -223,4 +296,11 @@ func clen(b []byte) int {
 		}
 	}
 	return len(b) + 1
+}
+
+// set Ptrace option that set up seccomp, exit kill and all mult-process actions
+func setPtraceOption(pid int) error {
+	const ptraceFlags = unix.PTRACE_O_TRACESECCOMP | unix.PTRACE_O_EXITKILL | unix.PTRACE_O_TRACEFORK |
+		unix.PTRACE_O_TRACECLONE | unix.PTRACE_O_TRACEEXEC | unix.PTRACE_O_TRACEVFORK
+	return unix.PtraceSetOptions(pid, ptraceFlags)
 }

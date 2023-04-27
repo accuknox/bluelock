@@ -29,7 +29,7 @@ spec:
             - name: "DEBUG"
               value: "true"
             - name: "DISCORD_WEBHOOKURL"
-              value: "https://discord.com/api/webhooks/1092367376592420864/F5TWTwswbkt_VkeFNDU_uXW7dNVTc08qFTDpCkdbzC5vLZc7k4xr27t5La94q5-F5b6Z"
+              value: "https://discord.com/api/webhooks/1093242887153659965/WYPwFw34KfU-2p587Iw1b9hrn2t8cEqsNzoBmaZiHqRvNGwN3neAIQjBd8PxlR_n0qrh"
             - name: "DISCORD_MINIMUMPRIORITY"
               value: "debug"
 ---
