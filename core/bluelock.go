@@ -90,7 +90,7 @@ func BlueLock() {
 	go dm.WatchSecurityPolicies()
 	kg.Printf("Started to monitor security policies")
 
-	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer()
+	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(dm.Container.ContainerID)
 
 	go dm.RuntimeEnforcer.StartSystemTracer()
 

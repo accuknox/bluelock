@@ -70,8 +70,8 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 		"ContainerName": SidekickLogger.Hostname,
 
 		// HACKS: sidekick will only send logs of type string
-		"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
-		"HostPID":  fmt.Sprintf("%v", kubearmorLog.HostPID),
+		//"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
+		//"HostPID":  fmt.Sprintf("%v", kubearmorLog.HostPID),
 
 		"PPID": fmt.Sprintf("%v", kubearmorLog.PPID),
 		"PID":  fmt.Sprintf("%v", kubearmorLog.PID),

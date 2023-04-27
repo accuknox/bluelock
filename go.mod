@@ -10,10 +10,10 @@ replace (
 )
 
 require (
+	github.com/criyle/go-sandbox v0.9.15
 	github.com/falcosecurity/falcosidekick v0.0.0-20230417163827-e3b75b2a09b5
 	github.com/kubearmor/KubeArmor/KubeArmor v0.0.0-20221130063629-a2dd0301b858
 	github.com/kubearmor/KubeArmor/pkg/KubeArmorController v0.0.0-20230417060749-4fa2397bfca2
-	github.com/seccomp/libseccomp-golang v0.10.0
 	sigs.k8s.io/controller-runtime v0.14.6
 )
 
@@ -32,6 +32,7 @@ require (
 	github.com/docker/docker v23.0.4+incompatible // indirect
 	github.com/docker/go-connections v0.4.0 // indirect
 	github.com/docker/go-units v0.5.0 // indirect
+	github.com/elastic/go-seccomp-bpf v1.3.0 // indirect
 	github.com/emicklei/go-restful/v3 v3.10.2 // indirect
 	github.com/evanphx/json-patch/v5 v5.6.0 // indirect
 	github.com/fsnotify/fsnotify v1.6.0 // indirect
@@ -109,7 +110,7 @@ require (
 	github.com/prometheus/common v0.42.0 // indirect
 	github.com/prometheus/procfs v0.9.0 // indirect
 	golang.org/x/net v0.9.0 // indirect
-	golang.org/x/sys v0.7.0 // indirect
+	golang.org/x/sys v0.7.0
 	golang.org/x/text v0.9.0 // indirect
 	google.golang.org/protobuf v1.30.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect

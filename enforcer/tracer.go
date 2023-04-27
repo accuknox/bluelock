@@ -139,6 +139,7 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 							}
 							log.Source = log.ProcessName
 							log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+							log.ContainerID = pe.ContainerID
 
 							// Enforcement Logic
 							if val, ok := pe.Rules.FilePaths[InnerKey{
@@ -223,7 +224,7 @@ func extractProcData(pid int) (string, int32, int32, string, error) {
 	// read status file
 	statusBytes, err := os.ReadFile(fmt.Sprintf("/proc/%d/status", pid))
 	if err != nil {
-		return "", 0, 0, "", err
+		return exePath, 0, 0, "", err
 	}
 
 	// extract ppid and uid from status
