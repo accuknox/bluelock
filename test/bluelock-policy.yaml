@@ -1,0 +1,17 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: bluelock-block-open-policy
+spec:
+  severity: 10
+  message: "a critical file was accessed"
+  tags:
+  - WARNING
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: reader-app-container
+  file:
+    matchPaths:
+    - path: /app/file2.txt
+  action:
+    Block

@@ -1,4 +1,4 @@
-package main
+package feeder
 
 import (
 	"bytes"
@@ -14,34 +14,34 @@ import (
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
 
-var SidekickURL, Hostname string
+// TODO: improve how it is used globally
+type Logger struct {
+	URL      string
+	Hostname string
+}
 
-func init () {
+var SidekickLogger *Logger
+
+func init() {
+	var sidekickURL string
 	var ok bool
-	if SidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
-		SidekickURL = "http://localhost:2801/"
+
+	if sidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
+		sidekickURL = "http://localhost:2048/"
 	}
 	var err error
-	Hostname, err = os.Hostname()
+	hostname, err := os.Hostname()
 	if err != nil {
-		Hostname = "none"
+		hostname = "none"
+	}
+
+	SidekickLogger = &Logger{
+		URL:      sidekickURL,
+		Hostname: hostname,
 	}
 }
 
 func PushLogSidekick(kubearmorLog tp.Log) {
-	if kubearmorLog.Source == "" {
-		return
-	}
-
-	// remove MergedDir
-	kubearmorLog.MergedDir = ""
-
-	// remove flags
-	kubearmorLog.PolicyEnabled = 0
-	kubearmorLog.ProcessVisibilityEnabled = false
-	kubearmorLog.FileVisibilityEnabled = false
-	kubearmorLog.NetworkVisibilityEnabled = false
-	kubearmorLog.CapabilitiesVisibilityEnabled = false
 
 	payload := types.FalcoPayload{}
 
@@ -67,18 +67,18 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 
 		"ContainerID": kubearmorLog.ContainerID,
 
-		"ContainerName": Hostname,
+		"ContainerName": SidekickLogger.Hostname,
 
 		// HACKS: sidekick will only send logs of type string
-		"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
-		"HostPID": fmt.Sprintf("%v", kubearmorLog.HostPID),
+		//"HostPPID": fmt.Sprintf("%v", kubearmorLog.HostPPID),
+		//"HostPID":  fmt.Sprintf("%v", kubearmorLog.HostPID),
 
 		"PPID": fmt.Sprintf("%v", kubearmorLog.PPID),
-		"PID": fmt.Sprintf("%v", kubearmorLog.PID),
-		"UID": fmt.Sprintf("%v", kubearmorLog.UID),
+		"PID":  fmt.Sprintf("%v", kubearmorLog.PID),
+		"UID":  fmt.Sprintf("%v", kubearmorLog.UID),
 
 		"ParentProcessName": kubearmorLog.ParentProcessName,
-		"ProcessName": kubearmorLog.ProcessName,
+		"ProcessName":       kubearmorLog.ProcessName,
 	}
 
 	outputFields["Type"] = "ContainerLog"
@@ -91,11 +91,17 @@ func PushLogSidekick(kubearmorLog tp.Log) {
 
 	payload.Output = kubearmorLog.Result
 	payload.Rule = "None"
-	payload.Priority = types.Informational
+
+	if kubearmorLog.Action == "Block" {
+		payload.Priority = types.Critical
+	} else {
+		payload.Priority = types.Informational
+	}
+
 	payload.OutputFields = outputFields
 
 	// extra to make sidekick work
-	payload.Hostname = Hostname
+	payload.Hostname = SidekickLogger.Hostname
 
 	SendPayload(payload)
 }
@@ -106,7 +112,7 @@ func SendPayload(payload types.FalcoPayload) {
 		log.Println("ERROR: parsing JSON body:", err)
 	}
 
-	resp, err := http.Post(SidekickURL, "application/json", bytes.NewBuffer(body))
+	resp, err := http.Post(SidekickLogger.URL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Println("ERROR: pushing log:", err.Error())
 		return
