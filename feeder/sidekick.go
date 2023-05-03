@@ -16,8 +16,8 @@ import (
 
 // TODO: improve how it is used globally
 type Logger struct {
-	SidekickURL string
-	Hostname    string
+	URL      string
+	Hostname string
 }
 
 var SidekickLogger *Logger
@@ -27,7 +27,7 @@ func init() {
 	var ok bool
 
 	if sidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
-		sidekickURL = "http://localhost:2801/"
+		sidekickURL = "http://localhost:2048/"
 	}
 	var err error
 	hostname, err := os.Hostname()
@@ -36,8 +36,8 @@ func init() {
 	}
 
 	SidekickLogger = &Logger{
-		SidekickURL: sidekickURL,
-		Hostname:    hostname,
+		URL:      sidekickURL,
+		Hostname: hostname,
 	}
 }
 
@@ -112,7 +112,7 @@ func SendPayload(payload types.FalcoPayload) {
 		log.Println("ERROR: parsing JSON body:", err)
 	}
 
-	resp, err := http.Post(SidekickLogger.SidekickURL, "application/json", bytes.NewBuffer(body))
+	resp, err := http.Post(SidekickLogger.URL, "application/json", bytes.NewBuffer(body))
 	if err != nil {
 		log.Println("ERROR: pushing log:", err.Error())
 		return
