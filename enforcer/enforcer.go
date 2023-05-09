@@ -1,17 +1,20 @@
 package enforcer
 
-import "github.com/daemon1024/bluelock/feeder"
+import (
+	"github.com/daemon1024/bluelock/feeder"
+	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
+)
 
 type PtraceEnforcer struct {
-	ContainerID string
-	Logger *feeder.Logger
+	Container *tp.Container
+	Logger *feeder.Feeder
 	Rules  *RuleSet
 }
 
-func NewPtraceEnforcer(cid string) *PtraceEnforcer {
+func NewPtraceEnforcer(container *tp.Container, logger *feeder.Feeder) *PtraceEnforcer {
 	return &PtraceEnforcer{
-		ContainerID: cid,
-		Logger: feeder.SidekickLogger,
+		Container: container,
+		Logger: logger,
 		Rules:  CreateNewRuleSet(),
 	}
 }

@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: kubearmor
+  namespace: default
+spec:
+  selector:
+    kubearmor-app: kubearmor-relay
+  ports:
+  - name: "grpc-port"
+    port: 32767
+    protocol: TCP
+  - name: "http-port"
+    port: 2801
+    protocol: TCP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubearmor-relay
+  namespace: default
+  labels:
+    kubearmor-app: kubearmor-relay
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kubearmor-app: kubearmor-relay
+  template:
+    metadata:
+      labels:
+        kubearmor-app: kubearmor-relay
+      annotations:
+        kubearmor-policy: audited
+    spec:
+      serviceAccountName: kubearmor
+      containers:
+      - name: kubearmor-relay-server
+        image: ttl.sh/relayserverka
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 32767
+        - containerPort: 2801
+        resources:
+          requests:
+            cpu: 250m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 128Mi

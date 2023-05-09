@@ -1,14 +1,16 @@
 package enforcer
 
 import (
-	"fmt"
-
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
 
 type RuleSet struct {
 	ProcessPaths      map[InnerKey]RuleConfig
 	FilePaths         map[InnerKey]RuleConfig
+	NetworkRules       map [InnerKey]RuleConfig
+	ProcWhiteListPosture bool
+	FileWhiteListPosture bool
+	NetWhiteListPosture bool
 }
 
 type InnerKey struct {
@@ -24,14 +26,16 @@ func CreateNewRuleSet() (r *RuleSet) {
 	r = new(RuleSet)
 	r.ProcessPaths = make(map[InnerKey]RuleConfig)
 	r.FilePaths = make(map[InnerKey]RuleConfig)
+	r.NetworkRules = make(map[InnerKey]RuleConfig)
 	return r
 }
 
-func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy) {
+func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defaultPosture tp.DefaultPosture) {
 	newRules := CreateNewRuleSet()
 
 	for _, secPolicy := range securityPolicies {
-		// parse process rules
+
+		// parse file rules
 		for _, path := range secPolicy.Spec.File.MatchPaths {
 			var rc RuleConfig
 
@@ -40,6 +44,9 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy) {
 
 			if len(path.FromSource) == 0 {
 				if path.Action == "Allow" {
+					if defaultPosture.FileAction == "block" {
+						newRules.FileWhiteListPosture = true
+					}
 					rc.Allow = true
 					rc.Deny = false
 				} else if path.Action == "Block" {
@@ -50,11 +57,13 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy) {
 					Path: path.Path,
 					Source: "",
 				}
-				fmt.Println("I got new rules.")
 				newRules.FilePaths[key] = rc
 			} else {
 				for _, src := range path.FromSource {
 					if path.Action == "Allow" {
+						if defaultPosture.FileAction == "block" {
+							newRules.FileWhiteListPosture = true
+						}
 						rc.Allow = true
 						rc.Deny = false
 					} else if path.Action == "Block" {
