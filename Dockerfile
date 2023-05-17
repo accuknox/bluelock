@@ -9,6 +9,6 @@ RUN go build -o bluelock .
 
 FROM ubuntu
 WORKDIR /app
-RUN apt update -y; apt install -y libc-dev libseccomp-dev socat
+RUN apt update -y; apt install -y libc-dev libseccomp-dev socat curl wget
 COPY --from=build /app .
 CMD ["./bluelock", "socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash"]

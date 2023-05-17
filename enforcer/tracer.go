@@ -187,7 +187,7 @@ func (t *Tracer) handle(pid int) {
 		log.Data = "syscall=execve"
 
 		// Enforcement Logic
-		if val, ok := t.Rules.ProcessPaths[InnerKey{
+		if val, ok := t.Rules.ProcessRules[InnerKey{
 			Path:   log.Resource,
 			Source: "",
 		}]; ok {
@@ -200,7 +200,7 @@ func (t *Tracer) handle(pid int) {
 				log.Result = "Permission denied"
 			}
 		}
-		if val, ok := t.Rules.ProcessPaths[InnerKey{
+		if val, ok := t.Rules.ProcessRules[InnerKey{
 			Path:   log.Resource,
 			Source: log.Source,
 		}]; ok {
@@ -242,7 +242,7 @@ func (t *Tracer) handle(pid int) {
 		}
 
 		// Enforcement Logic
-		if val, ok := t.Rules.FilePaths[InnerKey{
+		if val, ok := t.Rules.FileRules[InnerKey{
 			Path:   log.Resource,
 			Source: "",
 		}]; ok {
@@ -255,7 +255,7 @@ func (t *Tracer) handle(pid int) {
 				log.Result = "Permission denied"
 			}
 		}
-		if val, ok := t.Rules.FilePaths[InnerKey{
+		if val, ok := t.Rules.FileRules[InnerKey{
 			Path:   log.Resource,
 			Source: log.Source,
 		}]; ok {

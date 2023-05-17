@@ -10,8 +10,17 @@ spec:
   selector:
     matchLabels:
       kubearmor.io/container.name: reader-app-container
+  process:
+    matchPaths:
+      - path: /usr/bin/ls
+      - path: /usr/bin/cat
+  network:
+    matchProtocols:
+      - protocol: tcp
+        fromSource:
+        - path: /usr/bin/curl
   file:
     matchPaths:
-    - path: /app/file2.txt
+    - path: /app/README.md
   action:
     Block

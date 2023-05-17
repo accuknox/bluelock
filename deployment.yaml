@@ -25,7 +25,11 @@ spec:
             - name: "SIDEKICK_URL"
               value: "http://kubearmor.default.svc.cluster.local:2801"
             - name: "DEFAULTFILEPOSTURE"
-              value: "block"
+              value: "audit"
+            - name: "DEFAULTPROCESPOSTURE"
+              value: "audit"
+            - name: "DEFAULTNETWORKPOSTURE"
+              value: "audit"
           ports:
             - containerPort: 1337
         - name: sidekick-container
