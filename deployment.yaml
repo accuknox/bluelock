@@ -21,6 +21,11 @@ spec:
           imagePullPolicy: Never
           #image: ttl.sh/bluelock
           #imagePullPolicy: Always
+          env:
+            - name: "SIDEKICK_URL"
+              value: "http://kubearmor.default.svc.cluster.local:2801"
+            - name: "DEFAULTFILEPOSTURE"
+              value: "block"
           ports:
             - containerPort: 1337
         - name: sidekick-container

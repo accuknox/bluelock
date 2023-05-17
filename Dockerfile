@@ -1,10 +1,10 @@
 FROM golang:1.19 AS build
 
 WORKDIR /app
+RUN apt update -y; apt install -y libseccomp-dev
 
 ADD . .
 
-RUN apt update -y; apt install -y gcc libseccomp-dev
 RUN go build -o bluelock .
 
 FROM ubuntu

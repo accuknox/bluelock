@@ -108,62 +108,6 @@ func (dm *BlueLockDaemon) getPod() error {
 	return fmt.Errorf(PodNotFoundErr)
 }
 
-//func (dm *BlueLockDaemon) GetPodInfoWithRetry() (tp.K8sPod, error) {
-//	pod := corev1.Pod{}
-//	k8sPod := tp.K8sPod{}
-//	retry := true
-//	attempt := 1
-//
-//	for retry {
-//		podList, err := K8s.K8sClient.CoreV1().Pods(corev1.NamespaceAll).List(context.Background(), metav1.ListOptions{})
-//		if err != nil {
-//			kg.Errf("Failed to get pod data: ", err.Error())
-//			return tp.K8sPod{}, nil
-//		}
-//
-//		for _, p := range podList.Items {
-//			for _, container := range p.Status.ContainerStatuses {
-//				if len(container.ContainerID) > 0 {
-//					id := strings.SplitAfter(container.ContainerID, "://")[1]
-//
-//					// if pod and container ID matched
-//					if id == dm.Container.ContainerID {
-//						retry = false
-//						pod = p
-//						k8sPod.Containers[container.ContainerID] = container.Name
-//						k8sPod.ContainerImages[container.ContainerID] = container.Image + kl.GetSHA256ofImage(container.ImageID)
-//
-//		k8sPod.Metadata = map[string]string{}
-//		k8sPod.Metadata["namespaceName"] = pod.Namespace
-//		k8sPod.Metadata["podName"] = pod.Name
-//
-//		k8sPod.Annotations = map[string]string{}
-//		for k, v := range pod.Annotations {
-//			k8sPod.Annotations[k] = v
-//		}
-//
-//		k8sPod.Labels = map[string]string{}
-//		for k, v := range pod.Labels {
-//			if k == "pod-template-hash" {
-//				continue
-//			}
-//
-//			if k == "pod-template-generation" {
-//				continue
-//			}
-//
-//			if k == "controller-revision-hash" {
-//				continue
-//			}
-//			k8sPod.Labels[k] = v
-//		}
-//		k8sPod.Containers = map[string]string{}
-//		k8sPod.ContainerImages = map[string]string{}
-//	}
-//
-//	return k8sPod, nil
-//}
-
 func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 	pod := dm.K8sPod
 	newPoint := tp.EndPoint{}
@@ -238,6 +182,8 @@ func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 
 		dm.Container = container
 	}
+
+	newPoint.DefaultPosture = dm.DefaultPosture
 
 	//dm.DefaultPosturesLock.Lock()
 	//if val, ok := dm.DefaultPostures[newPoint.NamespaceName]; ok {
@@ -685,8 +631,6 @@ func (dm *BlueLockDaemon) CreateSecurityPolicy(policy ksp.KubeArmorPolicy) (secP
 
 // UpdateSecurityPolicy Function
 func (dm *BlueLockDaemon) UpdateSecurityPolicy(action string, secPolicy tp.SecurityPolicy) {
-	//dm.EndPointsLock.Lock()
-	//defer dm.EndPointsLock.Unlock()
 	endPoint := dm.EndPoint
 	if action == "ADDED" {
 		// add a new security policy if it doesn't exist
@@ -716,9 +660,9 @@ func (dm *BlueLockDaemon) UpdateSecurityPolicy(action string, secPolicy tp.Secur
 			}
 		}
 	}
-	
-	dm.RuntimeEnforcer.UpdateRules(dm.EndPoint.SecurityPolicies)
 
+	dm.RuntimeEnforcer.UpdateRules(dm.EndPoint.SecurityPolicies, dm.DefaultPosture)
+	dm.Logger.UpdateSecurityPolicy(action, dm.EndPoint)
 
 	/* feeder
 	if cfg.GlobalCfg.Policy {
@@ -734,6 +678,7 @@ func (dm *BlueLockDaemon) UpdateSecurityPolicy(action string, secPolicy tp.Secur
 	}
 	*/
 
+	// TODO: use identities for updating policies
 	//for idx, endPoint := range dm.EndPoints {
 	//	// update a security policy
 	//	if kl.MatchIdentities(secPolicy.Spec.Selector.Identities, endPoint.Identities) && (len(secPolicy.Spec.Selector.Containers) == 0 || kl.ContainsElement(secPolicy.Spec.Selector.Containers, endPoint.ContainerName)) {

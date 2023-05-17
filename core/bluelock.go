@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/daemon1024/bluelock/config"
+	cfg "github.com/daemon1024/bluelock/config"
 	"github.com/daemon1024/bluelock/enforcer"
 	"github.com/daemon1024/bluelock/feeder"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
@@ -29,14 +31,14 @@ type BlueLockDaemon struct {
 	SecurityPolicies     []tp.SecurityPolicy
 	SecurityPoliciesLock *sync.RWMutex
 
-	// Sidekick logger
-	Logger *feeder.Logger
+	// DefaultPosture
+	DefaultPosture tp.DefaultPosture
+
+	// Logger
+	Logger *feeder.Feeder
 
 	// Enforcer
 	RuntimeEnforcer *enforcer.PtraceEnforcer
-
-	// Monitor
-
 }
 
 func NewBlueLockDaemon() *BlueLockDaemon {
@@ -48,7 +50,7 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	dm.Container = tp.Container{}
 	dm.SecurityPolicies = []tp.SecurityPolicy{}
 	dm.SecurityPoliciesLock = new(sync.RWMutex)
-	dm.Logger = feeder.SidekickLogger
+	dm.Logger = nil
 	dm.RuntimeEnforcer = nil
 
 	return dm
@@ -59,6 +61,12 @@ var StopChan chan struct{}
 
 func BlueLock() {
 	dm := NewBlueLockDaemon()
+
+	if err := config.LoadConfig(); err != nil {
+		kg.Err(err.Error())
+		return
+	}
+
 	dm.K8sEnabled = true
 	if !K8s.InitK8sClient() {
 		kg.Err("Failed to initialize Kubernetes client")
@@ -70,6 +78,12 @@ func BlueLock() {
 	}
 
 	kg.Print("Initialized Kubernetes client")
+
+	dm.DefaultPosture = tp.DefaultPosture {
+		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
+		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
+		CapabilitiesAction: cfg.GlobalCfg.DefaultCapabilitiesPosture,
+	}
 
 	containerID, err := GetContainerID()
 	//fmt.Println(containerID)
@@ -90,7 +104,9 @@ func BlueLock() {
 	go dm.WatchSecurityPolicies()
 	kg.Printf("Started to monitor security policies")
 
-	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(dm.Container.ContainerID)
+	dm.Logger = feeder.NewFeeder()
+
+	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(&dm.Container, dm.Logger)
 
 	go dm.RuntimeEnforcer.StartSystemTracer()
 

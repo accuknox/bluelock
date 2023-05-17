@@ -8,14 +8,11 @@ import (
 	"runtime"
 	"strconv"
 	"syscall"
-	"time"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
-	"github.com/daemon1024/bluelock/feeder"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
-	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	"golang.org/x/sys/unix"
 )
 
@@ -88,7 +85,10 @@ func (t *Tracer) trace() {
 			// Ensure the process have called setpgid
 			pid, err = unix.Wait4(t.pgid, &wstatus, unix.WALL, nil)
 		}
-		fmt.Println("pid: ", pid, " wstatus: ", wstatus, " err: ", err, "")
+		if err != nil {
+			kg.Warnf("Couldn't wait for PID: %d. WaitStatus: %d, Error: %s", pid, &wstatus, err)
+		}
+		//fmt.Println("pid: ", pid, " wstatus: ", wstatus, " err: ", err, "")
 
 		switch {
 		case wstatus.Exited():
@@ -130,27 +130,23 @@ func (t *Tracer) trace() {
 
 				case unix.PTRACE_EVENT_EXEC:
 					// forked tracee have successfully called execve
-					fmt.Println("execve")
 					if !t.execved {
 						t.execved = true
 					}
 				case unix.PTRACE_EVENT_VFORK:
-					fmt.Println("vfork")
 					if !t.execved {
 						t.execved = true
 					}
 				case unix.PTRACE_EVENT_CLONE:
-					fmt.Println("clone")
+					if !t.execved {
+						t.execved = true
+					}
+				case unix.PTRACE_EVENT_FORK:
 					if !t.execved {
 						t.execved = true
 					}
 				case unix.PTRACE_EVENT_EXIT:
 					fmt.Println("exit")
-				case unix.PTRACE_EVENT_FORK:
-					fmt.Println("fork")
-					if !t.execved {
-						t.execved = true
-					}
 				default:
 					fmt.Println("ptrace unexpected trap cause: ", trapCause)
 
@@ -170,10 +166,9 @@ func (t *Tracer) handle(pid int) {
 	if err != nil {
 		return
 	}
-	log := tp.Log{}
+	log := t.NewBaseLog()
 	if regs.Orig_rax == 257 {
 		log.PID = int32(pid)
-		log.Timestamp = time.Now().UTC().Unix()
 		log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
 		log.Operation = "File"
 		log.ProcessName, log.PPID, log.UID, log.ParentProcessName, err = extractProcData(pid)
@@ -182,7 +177,6 @@ func (t *Tracer) handle(pid int) {
 		}
 		log.Source = log.ProcessName
 		log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
-		log.ContainerID = t.ContainerID
 
 		// Enforcement Logic
 		if val, ok := t.Rules.FilePaths[InnerKey{
@@ -195,6 +189,7 @@ func (t *Tracer) handle(pid int) {
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
 				log.Action = "Block"
+				log.Result = "Permission denied"
 			}
 		}
 		if val, ok := t.Rules.FilePaths[InnerKey{
@@ -207,6 +202,7 @@ func (t *Tracer) handle(pid int) {
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
+				log.Result = "Permission denied"
 
 			}
 		}
@@ -215,6 +211,6 @@ func (t *Tracer) handle(pid int) {
 		fmt.Print(string(b))
 
 		// feeder.PushLogSidekick(log)
-		feeder.PushLogRelay(log)
+		t.Logger.PushLogRelay(log)
 	}
 }
