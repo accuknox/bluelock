@@ -14,6 +14,9 @@ require (
 	github.com/falcosecurity/falcosidekick v0.0.0-20230417163827-e3b75b2a09b5
 	github.com/kubearmor/KubeArmor/KubeArmor v0.0.0-20221130063629-a2dd0301b858
 	github.com/kubearmor/KubeArmor/pkg/KubeArmorController v0.0.0-20230417060749-4fa2397bfca2
+	github.com/kubearmor/KubeArmor/protobuf v0.0.0-20230417060749-4fa2397bfca2
+	github.com/spf13/viper v1.15.0
+	golang.org/x/exp v0.0.0-20230315142452-642cacee5cc0
 	sigs.k8s.io/controller-runtime v0.14.6
 )
 
@@ -48,7 +51,6 @@ require (
 	github.com/imdario/mergo v0.3.15 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/kubearmor/KubeArmor/deployments v0.0.0-20230417060749-4fa2397bfca2 // indirect
-	github.com/kubearmor/KubeArmor/protobuf v0.0.0-20230417060749-4fa2397bfca2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
@@ -66,7 +68,6 @@ require (
 	github.com/spf13/cast v1.5.0 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
-	github.com/spf13/viper v1.15.0 // indirect
 	github.com/subosito/gotenv v1.4.2 // indirect
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect

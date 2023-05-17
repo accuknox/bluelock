@@ -5,16 +5,16 @@ import (
 )
 
 type RuleSet struct {
-	ProcessPaths      map[InnerKey]RuleConfig
-	FilePaths         map[InnerKey]RuleConfig
-	NetworkRules       map [InnerKey]RuleConfig
+	ProcessPaths         map[InnerKey]RuleConfig
+	FilePaths            map[InnerKey]RuleConfig
+	NetworkRules         map[InnerKey]RuleConfig
 	ProcWhiteListPosture bool
 	FileWhiteListPosture bool
-	NetWhiteListPosture bool
+	NetWhiteListPosture  bool
 }
 
 type InnerKey struct {
-	Path string
+	Path   string
 	Source string
 }
 
@@ -54,7 +54,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 					rc.Deny = true
 				}
 				key := InnerKey{
-					Path: path.Path,
+					Path:   path.Path,
 					Source: "",
 				}
 				newRules.FilePaths[key] = rc
@@ -71,7 +71,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 						rc.Deny = true
 					}
 					key := InnerKey{
-						Path: path.Path,
+						Path:   path.Path,
 						Source: src.Path,
 					}
 					newRules.FilePaths[key] = rc
