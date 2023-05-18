@@ -82,7 +82,6 @@ func BlueLock() {
 	dm.DefaultPosture = tp.DefaultPosture {
 		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
 		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
-		CapabilitiesAction: cfg.GlobalCfg.DefaultCapabilitiesPosture,
 	}
 
 	containerID, err := GetContainerID()

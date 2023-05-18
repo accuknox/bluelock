@@ -1,6 +1,6 @@
 module github.com/daemon1024/bluelock
 
-go 1.19
+go 1.20
 
 replace (
 	github.com/kubearmor/KubeArmor/KubeArmor => github.com/DelusionalOptimist/KubeArmor/KubeArmor v0.0.0-20230419153811-5d2c23d74f23

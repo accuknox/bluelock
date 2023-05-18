@@ -145,8 +145,6 @@ func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 			newPoint.FileVisibilityEnabled = true
 		} else if visibility == "network" {
 			newPoint.NetworkVisibilityEnabled = true
-		} else if visibility == "capabilities" {
-			newPoint.CapabilitiesVisibilityEnabled = true
 		}
 	}
 
@@ -178,7 +176,6 @@ func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 		container.ProcessVisibilityEnabled = newPoint.ProcessVisibilityEnabled
 		container.FileVisibilityEnabled = newPoint.FileVisibilityEnabled
 		container.NetworkVisibilityEnabled = newPoint.NetworkVisibilityEnabled
-		container.CapabilitiesVisibilityEnabled = newPoint.CapabilitiesVisibilityEnabled
 
 		dm.Container = container
 	}
@@ -192,7 +189,6 @@ func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 	//	globalDefaultPosture := tp.DefaultPosture{
 	//		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
 	//		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
-	//		CapabilitiesAction: cfg.GlobalCfg.DefaultCapabilitiesPosture,
 	//	}
 	//	newPoint.DefaultPosture = globalDefaultPosture
 	//}
@@ -238,7 +234,6 @@ func (dm *BlueLockDaemon) CreateSecurityPolicy(policy ksp.KubeArmorPolicy) (secP
 	}
 
 	kl.ObjCommaExpandFirstDupOthers(&secPolicy.Spec.Network.MatchProtocols)
-	kl.ObjCommaExpandFirstDupOthers(&secPolicy.Spec.Capabilities.MatchCapabilities)
 
 	if secPolicy.Spec.Severity == 0 {
 		secPolicy.Spec.Severity = 1 // the lowest severity, by default
@@ -533,99 +528,6 @@ func (dm *BlueLockDaemon) CreateSecurityPolicy(policy ksp.KubeArmorPolicy) (secP
 		}
 	}
 
-	if len(secPolicy.Spec.Capabilities.MatchCapabilities) > 0 {
-		for idx, cap := range secPolicy.Spec.Capabilities.MatchCapabilities {
-			if cap.Severity == 0 {
-				if secPolicy.Spec.Capabilities.Severity != 0 {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Severity = secPolicy.Spec.Capabilities.Severity
-				} else {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Severity = secPolicy.Spec.Severity
-				}
-			}
-
-			if len(cap.Tags) == 0 {
-				if len(secPolicy.Spec.Capabilities.Tags) > 0 {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Tags = secPolicy.Spec.Capabilities.Tags
-				} else {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Tags = secPolicy.Spec.Tags
-				}
-			}
-
-			if len(cap.Message) == 0 {
-				if len(secPolicy.Spec.Capabilities.Message) > 0 {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Message = secPolicy.Spec.Capabilities.Message
-				} else {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Message = secPolicy.Spec.Message
-				}
-			}
-
-			if len(cap.Action) == 0 {
-				if len(secPolicy.Spec.Capabilities.Action) > 0 {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Action = secPolicy.Spec.Capabilities.Action
-				} else {
-					secPolicy.Spec.Capabilities.MatchCapabilities[idx].Action = secPolicy.Spec.Action
-				}
-			}
-		}
-	}
-
-	if len(secPolicy.Spec.Syscalls.MatchSyscalls) > 0 {
-		for idx, syscall := range secPolicy.Spec.Syscalls.MatchSyscalls {
-			if syscall.Severity == 0 {
-				if secPolicy.Spec.Syscalls.Severity != 0 {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Severity = secPolicy.Spec.Syscalls.Severity
-				} else {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Severity = secPolicy.Spec.Severity
-				}
-			}
-
-			if len(syscall.Tags) == 0 {
-				if len(secPolicy.Spec.Syscalls.Tags) > 0 {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Tags = secPolicy.Spec.Syscalls.Tags
-				} else {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Tags = secPolicy.Spec.Tags
-				}
-			}
-
-			if len(syscall.Message) == 0 {
-				if len(secPolicy.Spec.Syscalls.Message) > 0 {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Message = secPolicy.Spec.Syscalls.Message
-				} else {
-					secPolicy.Spec.Syscalls.MatchSyscalls[idx].Message = secPolicy.Spec.Message
-				}
-			}
-
-		}
-	}
-
-	if len(secPolicy.Spec.Syscalls.MatchPaths) > 0 {
-		for idx, syscall := range secPolicy.Spec.Syscalls.MatchPaths {
-			if syscall.Severity == 0 {
-				if secPolicy.Spec.Syscalls.Severity != 0 {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Severity = secPolicy.Spec.Syscalls.Severity
-				} else {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Severity = secPolicy.Spec.Severity
-				}
-			}
-
-			if len(syscall.Tags) == 0 {
-				if len(secPolicy.Spec.Syscalls.Tags) > 0 {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Tags = secPolicy.Spec.Syscalls.Tags
-				} else {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Tags = secPolicy.Spec.Tags
-				}
-			}
-
-			if len(syscall.Message) == 0 {
-				if len(secPolicy.Spec.Syscalls.Message) > 0 {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Message = secPolicy.Spec.Syscalls.Message
-				} else {
-					secPolicy.Spec.Syscalls.MatchPaths[idx].Message = secPolicy.Spec.Message
-				}
-			}
-
-		}
-	}
 	return
 }
 

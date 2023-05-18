@@ -27,7 +27,6 @@ func (t *Tracer) NewBaseLog() tp.Log {
 	log.ProcessVisibilityEnabled = container.ProcessVisibilityEnabled
 	log.FileVisibilityEnabled = container.FileVisibilityEnabled
 	log.NetworkVisibilityEnabled = container.NetworkVisibilityEnabled
-	log.CapabilitiesVisibilityEnabled = container.CapabilitiesVisibilityEnabled
 
 	log.Result = "Passed"
 

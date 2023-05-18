@@ -9,7 +9,7 @@ spec:
   - WARNING
   selector:
     matchLabels:
-      kubearmor.io/container.name: reader-app-container
+      kubearmor.io/container.name: armored-container
   process:
     matchPaths:
       - path: /usr/bin/ls

@@ -27,7 +27,6 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	kubearmorLog.ProcessVisibilityEnabled = false
 	kubearmorLog.FileVisibilityEnabled = false
 	kubearmorLog.NetworkVisibilityEnabled = false
-	kubearmorLog.CapabilitiesVisibilityEnabled = false
 
 	if fd.Output == "stdout" {
 		arr, _ := json.Marshal(kubearmorLog)
