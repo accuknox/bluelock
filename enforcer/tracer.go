@@ -186,32 +186,28 @@ func (t *Tracer) handle(pid int) {
 		log.Resource = absPath(pid, getString(pid, uintptr(regs.Rdi)))
 		log.Data = "syscall=execve"
 
-		// Enforcement Logic
-		if val, ok := t.Rules.ProcessRules[InnerKey{
-			Path:   log.Resource,
-			Source: "",
-		}]; ok {
-			if val.Deny {
+		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.ProcessRules)
+		if match {
+			if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = ^uint64(syscall.EPERM)
 				_ = syscall.PtraceSetRegs(pid, &regs)
-				kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
+				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
 				log.Result = "Permission denied"
+			}
+			if matchedValue.Allow {
+				// Matched Policy and Allowed so we skip the log
+				return
 			}
 		}
-		if val, ok := t.Rules.ProcessRules[InnerKey{
-			Path:   log.Resource,
-			Source: log.Source,
-		}]; ok {
-			if val.Deny {
-				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
-				_ = syscall.PtraceSetRegs(pid, &regs)
-				kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
-				log.Action = "Block"
-				log.Result = "Permission denied"
-			}
+		if t.Rules.ProcWhiteListPosture && !match {
+			regs.Orig_rax = ^uint64(0)
+			regs.Rax = ^uint64(syscall.EPERM)
+			_ = syscall.PtraceSetRegs(pid, &regs)
+			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			log.Action = "Block"
+			log.Result = "Permission denied"
 		}
 	}
 
@@ -241,106 +237,7 @@ func (t *Tracer) handle(pid int) {
 			log.Data = "syscall=unlinkat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx))
 		}
 
-		match := false
-		matchedValue := RuleConfig{}
-
-		/*
-			Entity + Source
-			Directory + Source
-			Entity
-			Directory
-		*/
-		paths := strings.Split(log.Resource, "/")
-		hint := false
-
-		// Enforcement Logic
-		if val, ok := t.Rules.FileRules[InnerKey{
-			Path:   log.Resource,
-			Source: log.Source,
-		}]; ok {
-			match = true
-			matchedValue = val
-			goto FILE_DECISION
-		}
-
-		// Directory Match
-		for i := 1; i < len(paths); i++ {
-			var dir = strings.Join(paths[0:i], "/") + "/"
-			// Enforcement Logic
-			if val, ok := t.Rules.FileRules[InnerKey{
-				Path:   dir,
-				Source: log.Source,
-			}]; ok {
-				match = false
-				if val.Dir {
-					match = true
-					if val.Recursive && !val.Hint {
-						matchedValue = val
-						goto FILE_DECISION
-					} else if val.Recursive && val.Hint {
-						hint = true
-						matchedValue = val
-					} else {
-						continue
-					}
-				}
-				if !val.Hint {
-					break
-				}
-			}
-		}
-		if hint || match {
-			if hint {
-				match = true
-			}
-			goto FILE_DECISION
-		}
-
-		if val, ok := t.Rules.FileRules[InnerKey{
-			Path:   log.Resource,
-			Source: "",
-		}]; ok {
-			match = true
-			matchedValue = val
-			goto FILE_DECISION
-		}
-
-		hint = false
-
-		// Directory Match
-		for i := 1; i < len(paths); i++ {
-			var dir = strings.Join(paths[0:i], "/") + "/"
-			// Enforcement Logic
-			if val, ok := t.Rules.FileRules[InnerKey{
-				Path:   dir,
-				Source: "",
-			}]; ok {
-				match = false
-				if val.Dir {
-					match = true
-					if val.Recursive && !val.Hint {
-						matchedValue = val
-						goto FILE_DECISION
-					} else if val.Recursive && val.Hint {
-						hint = true
-						matchedValue = val
-					} else {
-						continue
-					}
-				}
-				if !val.Hint {
-					break
-				}
-			}
-		}
-		if hint || match {
-			if hint {
-				match = true
-			}
-			goto FILE_DECISION
-		}
-
-	FILE_DECISION:
+		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.FileRules)
 		if match {
 			if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
@@ -378,7 +275,7 @@ func (t *Tracer) handle(pid int) {
 
 		// extract rule from Resource
 		netrule := ""
-		if strings.Contains(stype, "SOCK_STREAM") && strings.Contains(sprotocol, "TCP") {
+		if strings.Contains(stype, "SOCK_STREAM") && (strings.Contains(sprotocol, "TCP") || strings.Contains(sprotocol, "0")) {
 			netrule = "tcp"
 		} else if strings.Contains(stype, "SOCK_DGRAM") && (strings.Contains(sprotocol, "UDP") || strings.Contains(sprotocol, "0")) {
 			netrule = "udp"
@@ -399,6 +296,7 @@ func (t *Tracer) handle(pid int) {
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
 				log.Action = "Block"
+				log.Result = "Permission denied"
 			}
 		}
 		if val, ok := t.Rules.NetworkRules[InnerKey{
@@ -411,6 +309,7 @@ func (t *Tracer) handle(pid int) {
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
+				log.Result = "Permission denied"
 			}
 		}
 
@@ -469,4 +368,107 @@ func (t *Tracer) handle(pid int) {
 	b, _ := json.MarshalIndent(log, "", "  ")
 	fmt.Print(string(b))
 	t.Logger.PushLogRelay(log)
+}
+
+func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (bool, RuleConfig) {
+	match := false
+	matchedValue := RuleConfig{}
+
+	/*
+		Entity + Source
+		Directory + Source
+		Entity
+		Directory
+	*/
+	paths := strings.Split(path, "/")
+	hint := false
+
+	// Enforcement Logic
+	if val, ok := rules[InnerKey{
+		Path:   path,
+		Source: source,
+	}]; ok {
+		match = true
+		matchedValue = val
+		return match, matchedValue
+	}
+
+	// Directory Match
+	for i := 1; i < len(paths); i++ {
+		var dir = strings.Join(paths[0:i], "/") + "/"
+		// Enforcement Logic
+		if val, ok := rules[InnerKey{
+			Path:   dir,
+			Source: source,
+		}]; ok {
+			match = false
+			if val.Dir {
+				match = true
+				if val.Recursive && !val.Hint {
+					matchedValue = val
+					return match, matchedValue
+				} else if val.Recursive && val.Hint {
+					hint = true
+					matchedValue = val
+				} else {
+					continue
+				}
+			}
+			if !val.Hint {
+				break
+			}
+		}
+	}
+	if hint || match {
+		if hint {
+			match = true
+		}
+		return match, matchedValue
+	}
+
+	if val, ok := rules[InnerKey{
+		Path:   path,
+		Source: "",
+	}]; ok {
+		match = true
+		matchedValue = val
+		return match, matchedValue
+	}
+
+	hint = false
+
+	// Directory Match
+	for i := 1; i < len(paths); i++ {
+		var dir = strings.Join(paths[0:i], "/") + "/"
+		// Enforcement Logic
+		if val, ok := rules[InnerKey{
+			Path:   dir,
+			Source: "",
+		}]; ok {
+			match = false
+			if val.Dir {
+				match = true
+				if val.Recursive && !val.Hint {
+					matchedValue = val
+					return match, matchedValue
+				} else if val.Recursive && val.Hint {
+					hint = true
+					matchedValue = val
+				} else {
+					continue
+				}
+			}
+			if !val.Hint {
+				break
+			}
+		}
+	}
+	if hint || match {
+		if hint {
+			match = true
+		}
+		return match, matchedValue
+	}
+
+	return false, RuleConfig{}
 }
