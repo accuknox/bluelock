@@ -21,7 +21,7 @@ type InnerKey struct {
 }
 
 type RuleConfig struct {
-	Dir, Recursive, ReadOnly, OwnerOnly, Deny, Allow bool
+	Dir, Hint, Recursive, ReadOnly, OwnerOnly, Deny, Allow bool
 }
 
 func CreateNewRuleSet() (r *RuleSet) {
@@ -162,29 +162,74 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 				}
 			}
 		}
+
+		// parse durectory rules
+		for _, dir := range secPolicy.Spec.File.MatchDirectories {
+			var rc RuleConfig
+
+			rc.OwnerOnly = dir.OwnerOnly
+			rc.ReadOnly = dir.ReadOnly
+			rc.Recursive = dir.Recursive
+
+			if len(dir.FromSource) == 0 {
+				if dir.Action == "Allow" {
+					if defaultPosture.FileAction == "block" {
+						newRules.FileWhiteListPosture = true
+					}
+					rc.Allow = true
+					rc.Deny = false
+				} else if dir.Action == "Block" {
+					rc.Allow = false
+					rc.Deny = true
+				}
+				dirtoMap(InnerKey{Path: dir.Directory}, newRules.FileRules, rc)
+			} else {
+				for _, src := range dir.FromSource {
+					if dir.Action == "Allow" {
+						if defaultPosture.FileAction == "block" {
+							newRules.FileWhiteListPosture = true
+						}
+						rc.Allow = true
+						rc.Deny = false
+					} else if dir.Action == "Block" {
+						rc.Allow = false
+						rc.Deny = true
+					}
+					dirtoMap(InnerKey{Path: dir.Directory, Source: src.Path}, newRules.FileRules, rc)
+				}
+			}
+		}
 	}
-
-	fuseProcAndFileRules(newRules.FileRules, newRules.ProcessRules)
-
-	resolveConflicts(pe.Rules.FileRules, newRules.FileRules)
-	resolveConflicts(pe.Rules.ProcessRules, newRules.ProcessRules)
-	resolveConflicts(pe.Rules.NetworkRules, newRules.NetworkRules)
 
 	pe.Rules = newRules
 }
 
-func fuseProcAndFileRules(procList, fileList map[InnerKey]RuleConfig) {
-	for k := range fileList {
-		if val, ok := procList[k]; ok {
-			fileList[k] = val
+// dirtoMap extracts parent directories from the Path Key and adds it as hints in the Container Rule Map
+func dirtoMap(dirKey InnerKey, m map[InnerKey]RuleConfig, val RuleConfig) {
+	key := dirKey
+	paths := strings.Split(dirKey.Path, "/")
+
+	// Add the directory itself but kernel space would refer it as a file so...
+	key.Path = strings.Join(paths[0:len(paths)-1], "/")
+	m[key] = val
+
+	key.Path = dirKey.Path
+	val.Dir = true
+	if oldval, ok := m[key]; ok {
+		if oldval.Hint {
+			val.Hint = true
 		}
 	}
-}
+	m[key] = val
 
-func resolveConflicts(oldRules, newRules map[InnerKey]RuleConfig) {
-	for key := range oldRules {
-		if _, ok := newRules[key]; !ok {
-			delete(oldRules, key)
+	for i := 1; i < len(paths)-1; i++ {
+		var key InnerKey
+		val.Dir = false
+		val.Hint = true
+		key.Path = strings.Join(paths[0:i], "/") + "/"
+		if oldval, ok := m[key]; ok {
+			val.Dir = oldval.Dir
 		}
+		m[key] = val
 	}
 }

@@ -241,32 +241,127 @@ func (t *Tracer) handle(pid int) {
 			log.Data = "syscall=unlinkat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx))
 		}
 
+		match := false
+		matchedValue := RuleConfig{}
+
+		/*
+			Entity + Source
+			Directory + Source
+			Entity
+			Directory
+		*/
+		paths := strings.Split(log.Resource, "/")
+		hint := false
+
 		// Enforcement Logic
-		if val, ok := t.Rules.FileRules[InnerKey{
-			Path:   log.Resource,
-			Source: "",
-		}]; ok {
-			if val.Deny {
-				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
-				_ = syscall.PtraceSetRegs(pid, &regs)
-				kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
-				log.Action = "Block"
-				log.Result = "Permission denied"
-			}
-		}
 		if val, ok := t.Rules.FileRules[InnerKey{
 			Path:   log.Resource,
 			Source: log.Source,
 		}]; ok {
-			if val.Deny {
+			match = true
+			matchedValue = val
+			goto FILE_DECISION
+		}
+
+		// Directory Match
+		for i := 1; i < len(paths); i++ {
+			var dir = strings.Join(paths[0:i], "/") + "/"
+			// Enforcement Logic
+			if val, ok := t.Rules.FileRules[InnerKey{
+				Path:   dir,
+				Source: log.Source,
+			}]; ok {
+				match = false
+				if val.Dir {
+					match = true
+					if val.Recursive && !val.Hint {
+						matchedValue = val
+						goto FILE_DECISION
+					} else if val.Recursive && val.Hint {
+						hint = true
+						matchedValue = val
+					} else {
+						continue
+					}
+				}
+				if !val.Hint {
+					break
+				}
+			}
+		}
+		if hint || match {
+			if hint {
+				match = true
+			}
+			goto FILE_DECISION
+		}
+
+		if val, ok := t.Rules.FileRules[InnerKey{
+			Path:   log.Resource,
+			Source: "",
+		}]; ok {
+			match = true
+			matchedValue = val
+			goto FILE_DECISION
+		}
+
+		hint = false
+
+		// Directory Match
+		for i := 1; i < len(paths); i++ {
+			var dir = strings.Join(paths[0:i], "/") + "/"
+			// Enforcement Logic
+			if val, ok := t.Rules.FileRules[InnerKey{
+				Path:   dir,
+				Source: "",
+			}]; ok {
+				match = false
+				if val.Dir {
+					match = true
+					if val.Recursive && !val.Hint {
+						matchedValue = val
+						goto FILE_DECISION
+					} else if val.Recursive && val.Hint {
+						hint = true
+						matchedValue = val
+					} else {
+						continue
+					}
+				}
+				if !val.Hint {
+					break
+				}
+			}
+		}
+		if hint || match {
+			if hint {
+				match = true
+			}
+			goto FILE_DECISION
+		}
+
+	FILE_DECISION:
+		if match {
+			if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = ^uint64(syscall.EPERM)
 				_ = syscall.PtraceSetRegs(pid, &regs)
-				kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
 				log.Result = "Permission denied"
 			}
+			if matchedValue.Allow {
+				// Matched Policy and Allowed so we skip the log
+				return
+			}
+		}
+		if t.Rules.FileWhiteListPosture && !match {
+			regs.Orig_rax = ^uint64(0)
+			regs.Rax = ^uint64(syscall.EPERM)
+			_ = syscall.PtraceSetRegs(pid, &regs)
+			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			log.Action = "Block"
+			log.Result = "Permission denied"
 		}
 	}
 
@@ -373,20 +468,5 @@ func (t *Tracer) handle(pid int) {
 	// }
 	b, _ := json.MarshalIndent(log, "", "  ")
 	fmt.Print(string(b))
-
-	// feeder.PushLogSidekick(log)
-	// feeder.P(log)
-}
-
-// define getUint16 and getUint8
-func getUint16(pid int, addr uintptr) uint16 {
-	var buff [2]byte
-	syscall.PtracePeekData(pid, addr, buff[:])
-	return uint16(buff[0]) | uint16(buff[1])<<8
-}
-
-func getUint8(pid int, addr uintptr) uint8 {
-	var buff [1]byte
-	syscall.PtracePeekData(pid, addr, buff[:])
-	return uint8(buff[0])
+	t.Logger.PushLogRelay(log)
 }
