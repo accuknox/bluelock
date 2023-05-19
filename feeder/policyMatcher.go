@@ -420,7 +420,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			switch log.Operation {
 			case "Process", "File":
 				if secPolicy.Operation != log.Operation {
-					fmt.Println("LINE 620")
 					continue
 				}
 
