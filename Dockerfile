@@ -1,14 +1,15 @@
-FROM golang:1.19 AS build
+FROM golang:1.20 AS build
+WORKDIR /build
 
-WORKDIR /app
+# install build-deps
 RUN apt update -y; apt install -y libseccomp-dev
-
 ADD . .
 
+#build bluelock
 RUN go build -o bluelock .
 
-FROM ubuntu
-WORKDIR /app
-RUN apt update -y; apt install -y libc-dev libseccomp-dev socat
-COPY --from=build /app .
-CMD ["./bluelock", "socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash"]
+# final image
+FROM scratch
+WORKDIR /
+COPY --from=build /build/bluelock .
+#ENTRYPOINT ["cp", "/build/bluelock", "/bluelock"]

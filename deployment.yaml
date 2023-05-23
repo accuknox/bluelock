@@ -1,45 +1,54 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: reader-app
+  name: armored-application
   labels:
-    deployment: reader-app
+    deployment: armored-application
 spec:
   replicas: 1
   selector:
     matchLabels:
-      kubearmor.io/container.name: reader-app
+      kubearmor.io/container.name: armored-container
   template:
     metadata:
       labels:
-        kubearmor.io/container.name: reader-app
+        kubearmor.io/container.name: armored-container
     spec:
       serviceAccountName: kubearmor
       containers:
-        - name: reader-app-container
-          image: bluelock:latest
-          imagePullPolicy: Never
-          #image: ttl.sh/bluelock
-          #imagePullPolicy: Always
-          env:
-            - name: "SIDEKICK_URL"
-              value: "http://kubearmor.default.svc.cluster.local:2801"
-            - name: "DEFAULTFILEPOSTURE"
-              value: "block"
+        - name: armored-container
+          image: delusionaloptimist/socat-kubearmor:latest
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1337
-        - name: sidekick-container
-          image: falcosecurity/falcosidekick:latest
-          ports:
-            - name: sidekick-port
-              containerPort: 2801
           env:
-            - name: "DEBUG"
-              value: "true"
-            - name: "DISCORD_WEBHOOKURL"
-              value: "https://discord.com/api/webhooks/1093242887153659965/WYPwFw34KfU-2p587Iw1b9hrn2t8cEqsNzoBmaZiHqRvNGwN3neAIQjBd8PxlR_n0qrh"
-            - name: "DISCORD_MINIMUMPRIORITY"
-              value: "debug"
+          - name: "SIDEKICK_URL"
+            value: "http://kubearmor.default.svc.cluster.local:2801"
+            #volumeMounts:
+            #  - mountPath: /bluelock
+        #volumes:
+        #  - emptyDir: {}
+        #    name: bluelock-dir
+        #initContainers:
+        #  - name: bluelock
+        #    image: bluelock:latest
+        #    imagePullPolicy: IfNotPresent
+        #    volumeMounts:
+        #      - mountPath: /bluelock
+        #        name: bluelock-dir
+            #    name: bluelock-dir
+            #- name: sidekick-container
+            #  image: falcosecurity/falcosidekick:latest
+            #  ports:
+            #    - name: sidekick-port
+            #      containerPort: 2801
+            #  env:
+            #    - name: "DEBUG"
+            #      value: "true"
+            #    - name: "DISCORD_WEBHOOKURL"
+            #      value: "https://discord.com/api/webhooks/1093242887153659965/WYPwFw34KfU-2p587Iw1b9hrn2t8cEqsNzoBmaZiHqRvNGwN3neAIQjBd8PxlR_n0qrh"
+            #    - name: "DISCORD_MINIMUMPRIORITY"
+            #      value: "debug"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

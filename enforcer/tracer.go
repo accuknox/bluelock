@@ -7,12 +7,15 @@ import (
 	"os/exec"
 	"runtime"
 	"strconv"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/criyle/go-sandbox/pkg/forkexec"
 	"github.com/criyle/go-sandbox/pkg/seccomp"
 	"github.com/criyle/go-sandbox/pkg/seccomp/libseccomp"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
+	"golang.org/x/exp/slices"
 	"golang.org/x/sys/unix"
 )
 
@@ -28,7 +31,10 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 
 	builder := libseccomp.Builder{
 		Trace: []string{
+			"open",
 			"openat",
+			"socket",
+			"execve",
 		},
 		Default: libseccomp.ActionAllow,
 	}
@@ -167,20 +173,121 @@ func (t *Tracer) handle(pid int) {
 		return
 	}
 	log := t.NewBaseLog()
-	if regs.Orig_rax == 257 {
-		log.PID = int32(pid)
-		log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
-		log.Operation = "File"
-		log.ProcessName, log.PPID, log.UID, log.ParentProcessName, err = extractProcData(pid)
-		if err != nil {
-			kg.Warnf("Error extracting process data %v \n", err)
-		}
+	log.PID = int32(pid)
+	log.Timestamp = time.Now().UTC().Unix()
+	log.ProcessName, log.PPID, log.UID, log.ParentProcessName, err = extractProcData(pid)
+	if err != nil {
+		kg.Warnf("Error extracting process data %v \n", err)
+	}
+
+	if slices.Contains([]int{syscall.SYS_EXECVE}, int(regs.Orig_rax)) {
+		log.Operation = "Process"
 		log.Source = log.ProcessName
-		log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+		log.Resource = absPath(pid, getString(pid, uintptr(regs.Rdi)))
+		log.Data = "syscall=execve"
+
+		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.ProcessRules)
+		if match {
+			if matchedValue.Deny {
+				regs.Orig_rax = ^uint64(0)
+				regs.Rax = ^uint64(syscall.EPERM)
+				_ = syscall.PtraceSetRegs(pid, &regs)
+				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
+				log.Action = "Block"
+				log.Result = "Permission denied"
+			}
+			if matchedValue.Allow {
+				// Matched Policy and Allowed so we skip the log
+				return
+			}
+		}
+		if t.Rules.ProcWhiteListPosture && !match {
+			regs.Orig_rax = ^uint64(0)
+			regs.Rax = ^uint64(syscall.EPERM)
+			_ = syscall.PtraceSetRegs(pid, &regs)
+			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			log.Action = "Block"
+			log.Result = "Permission denied"
+		}
+	}
+
+	if slices.Contains([]int{syscall.SYS_OPEN, syscall.SYS_OPENAT, syscall.SYS_MKNOD, syscall.SYS_MKNODAT, syscall.SYS_UNLINK, syscall.SYS_UNLINKAT}, int(regs.Orig_rax)) {
+
+		log.Operation = "File"
+		log.Source = log.ProcessName
+
+		switch regs.Orig_rax {
+		case syscall.SYS_OPEN:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rdi)))
+			log.Data = "syscall=open flags=" + strconv.Itoa(int(regs.Rsi)) + " mode=" + strconv.Itoa(int(regs.Rdx))
+		case syscall.SYS_OPENAT:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
+			log.Data = "syscall=openat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx)) + " mode=" + strconv.Itoa(int(regs.R10))
+		case syscall.SYS_MKNOD:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rdi)))
+			log.Data = "syscall=mknod mode=" + strconv.Itoa(int(regs.Rsi)) + " dev=" + strconv.Itoa(int(regs.Rdx))
+		case syscall.SYS_MKNODAT:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
+			log.Data = "syscall=mknodat fd=" + strconv.Itoa(int(regs.Rdi)) + " mode=" + strconv.Itoa(int(regs.Rdx)) + " dev=" + strconv.Itoa(int(regs.R10))
+		case syscall.SYS_UNLINK:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rdi)))
+			log.Data = "syscall=unlink"
+		case syscall.SYS_UNLINKAT:
+			log.Resource = absPath(pid, getString(pid, uintptr(regs.Rsi)))
+			log.Data = "syscall=unlinkat fd=" + strconv.Itoa(int(regs.Rdi)) + " flags=" + strconv.Itoa(int(regs.Rdx))
+		}
+
+		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.FileRules)
+		if match {
+			if matchedValue.Deny {
+				regs.Orig_rax = ^uint64(0)
+				regs.Rax = ^uint64(syscall.EPERM)
+				_ = syscall.PtraceSetRegs(pid, &regs)
+				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
+				log.Action = "Block"
+				log.Result = "Permission denied"
+			}
+			if matchedValue.Allow {
+				// Matched Policy and Allowed so we skip the log
+				return
+			}
+		}
+		if t.Rules.FileWhiteListPosture && !match {
+			regs.Orig_rax = ^uint64(0)
+			regs.Rax = ^uint64(syscall.EPERM)
+			_ = syscall.PtraceSetRegs(pid, &regs)
+			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			log.Action = "Block"
+			log.Result = "Permission denied"
+		}
+	}
+
+	if regs.Orig_rax == syscall.SYS_SOCKET {
+		log.Operation = "Network"
+		log.Source = log.ProcessName
+
+		sdomain := getSocketDomain(uint32(regs.Rdi))
+		stype := getSocketType(uint32(regs.Rsi))
+		sprotocol := getProtocol(int32(regs.Rdx))
+
+		log.Resource = "domain=" + sdomain + " type=" + stype + " protocol=" + sprotocol
+		log.Data = "syscall=SYS_SOCKET"
+
+		// extract rule from Resource
+		netrule := ""
+		if strings.Contains(stype, "SOCK_STREAM") && (strings.Contains(sprotocol, "TCP") || strings.Contains(sprotocol, "0")) {
+			netrule = "tcp"
+		} else if strings.Contains(stype, "SOCK_DGRAM") && (strings.Contains(sprotocol, "UDP") || strings.Contains(sprotocol, "0")) {
+			netrule = "udp"
+		} else if strings.Contains(sprotocol, "ICMP") && (strings.Contains(stype, "SOCK_DGRAM") || strings.Contains(stype, "SOCK_RAW")) {
+			netrule = "icmp"
+		} else if strings.Contains(stype, "SOCK_RAW") {
+			netrule = "raw"
+		}
 
 		// Enforcement Logic
-		if val, ok := t.Rules.FilePaths[InnerKey{
-			Path:   log.Resource,
+		if val, ok := t.Rules.NetworkRules[InnerKey{
+			Path:   netrule,
 			Source: "",
 		}]; ok {
 			if val.Deny {
@@ -192,25 +299,176 @@ func (t *Tracer) handle(pid int) {
 				log.Result = "Permission denied"
 			}
 		}
-		if val, ok := t.Rules.FilePaths[InnerKey{
-			Path:   log.Resource,
+		if val, ok := t.Rules.NetworkRules[InnerKey{
+			Path:   netrule,
 			Source: log.Source,
 		}]; ok {
 			if val.Deny {
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = ^uint64(syscall.EPERM)
 				_ = syscall.PtraceSetRegs(pid, &regs)
-				kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
 				log.Result = "Permission denied"
-
 			}
 		}
 
-		b, _ := json.MarshalIndent(log, "", "  ")
-		fmt.Print(string(b))
-
-		// feeder.PushLogSidekick(log)
-		t.Logger.PushLogRelay(log)
 	}
+
+	// if slices.Contains([]int{syscall.SYS_BIND, syscall.SYS_CONNECT, syscall.SYS_ACCEPT, syscall.SYS_ACCEPT4}, int(regs.Orig_rax)) {
+
+	// 	log.Operation = "Network"
+	// 	log.Source = log.ProcessName
+
+	// 	// Read Family and protocol from sockaddr pointer
+	// 	family := uint16(getUint16(pid, uintptr(regs.Rsi)))
+	// 	fd := regs.Rdi
+	// 	stype, err := syscall.GetsockoptInt(int(fd), syscall.SOL_SOCKET, syscall.SO_TYPE)
+	// 	var protocolStr string
+
+	// 	if err != nil {
+	// 		kg.Warnf("Error getting socket info", err)
+	// 	}
+
+	// 	switch stype {
+	// 	case syscall.SOCK_STREAM:
+	// 		protocolStr = "TCP/STREAM"
+	// 	case syscall.SOCK_DGRAM:
+	// 		protocolStr = "UDP/DGRAM"
+	// 	case syscall.SOCK_RAW:
+	// 		protocolStr = "RAW/RAW"
+	// 	}
+
+	// 	switch regs.Orig_rax {
+	// 	case syscall.SYS_BIND:
+	// 		log.Data = "syscall=bind"
+	// 	case syscall.SYS_CONNECT:
+	// 		log.Data = "syscall=connect"
+	// 	case syscall.SYS_ACCEPT:
+	// 		log.Data = "syscall=accept"
+	// 	case syscall.SYS_ACCEPT4:
+	// 		log.Data = "syscall=accept4"
+	// 	}
+
+	// 	// Convert Family and protocol to string
+	// 	var familyStr string
+	// 	switch family {
+	// 	case syscall.AF_INET:
+	// 		familyStr = "AF_INET"
+	// 	case syscall.AF_INET6:
+	// 		familyStr = "AF_INET6"
+	// 	case syscall.AF_UNIX:
+	// 		familyStr = "AF_UNIX"
+	// 	case syscall.AF_UNSPEC:
+	// 		familyStr = "AF_UNSPEC"
+	// 	}
+
+	// 	log.Resource = "Family=" + familyStr + " Protocol=" + protocolStr
+	// }
+	b, _ := json.MarshalIndent(log, "", "  ")
+	fmt.Print(string(b))
+	t.Logger.PushLogRelay(log)
+}
+
+func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (bool, RuleConfig) {
+	match := false
+	matchedValue := RuleConfig{}
+
+	/*
+		Entity + Source
+		Directory + Source
+		Entity
+		Directory
+	*/
+	paths := strings.Split(path, "/")
+	hint := false
+
+	// Enforcement Logic
+	if val, ok := rules[InnerKey{
+		Path:   path,
+		Source: source,
+	}]; ok {
+		match = true
+		matchedValue = val
+		return match, matchedValue
+	}
+
+	// Directory Match
+	for i := 1; i < len(paths); i++ {
+		var dir = strings.Join(paths[0:i], "/") + "/"
+		// Enforcement Logic
+		if val, ok := rules[InnerKey{
+			Path:   dir,
+			Source: source,
+		}]; ok {
+			match = false
+			if val.Dir {
+				match = true
+				if val.Recursive && !val.Hint {
+					matchedValue = val
+					return match, matchedValue
+				} else if val.Recursive && val.Hint {
+					hint = true
+					matchedValue = val
+				} else {
+					continue
+				}
+			}
+			if !val.Hint {
+				break
+			}
+		}
+	}
+	if hint || match {
+		if hint {
+			match = true
+		}
+		return match, matchedValue
+	}
+
+	if val, ok := rules[InnerKey{
+		Path:   path,
+		Source: "",
+	}]; ok {
+		match = true
+		matchedValue = val
+		return match, matchedValue
+	}
+
+	hint = false
+
+	// Directory Match
+	for i := 1; i < len(paths); i++ {
+		var dir = strings.Join(paths[0:i], "/") + "/"
+		// Enforcement Logic
+		if val, ok := rules[InnerKey{
+			Path:   dir,
+			Source: "",
+		}]; ok {
+			match = false
+			if val.Dir {
+				match = true
+				if val.Recursive && !val.Hint {
+					matchedValue = val
+					return match, matchedValue
+				} else if val.Recursive && val.Hint {
+					hint = true
+					matchedValue = val
+				} else {
+					continue
+				}
+			}
+			if !val.Hint {
+				break
+			}
+		}
+	}
+	if hint || match {
+		if hint {
+			match = true
+		}
+		return match, matchedValue
+	}
+
+	return false, RuleConfig{}
 }

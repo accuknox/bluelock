@@ -1,0 +1,31 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: ksp-armored-lenient-allow-sa
+spec:
+  severity: 7
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: armored-container
+  file:
+    matchDirectories:
+      - dir: /run/secrets/kubernetes.io/serviceaccount/
+        recursive: true
+        action: Block
+      - dir: /
+        recursive: true
+      - dir: /run/secrets/kubernetes.io/serviceaccount/
+        recursive: true
+        fromSource:
+          - path: /usr/bin/cat
+  process:
+    matchDirectories:
+      - dir: /usr/bin/
+        recursive: true
+
+        # cat /run/secrets/kubernetes.io/serviceaccount/token
+        # cat /etc/passwd
+        # head /run/secrets/kubernetes.io/serviceaccount/token
+        # head /etc/passwd
+
+  action: Allow

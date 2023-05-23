@@ -41,19 +41,6 @@ func getFileProcessUID(path string) string {
 	return ""
 }
 
-// getOperationAndCapabilityFromName Function
-func getOperationAndCapabilityFromName(capName string) (op, cap string) {
-	switch strings.ToLower(capName) {
-	case "net_raw":
-		op = "Network"
-		cap = "SOCK_RAW"
-	default:
-		return "", "unknown"
-	}
-
-	return op, cap
-}
-
 func (fd *Feeder) newMatchPolicy(policyEnabled int, policyName, src string, mp interface{}) tp.MatchPolicy {
 	match := tp.MatchPolicy{
 		PolicyName: policyName,
@@ -188,40 +175,6 @@ func (fd *Feeder) newMatchPolicy(policyEnabled int, policyName, src string, mp i
 		} else {
 			match.Action = npt.Action
 		}
-	} else if cct, ok := mp.(tp.CapabilitiesCapabilityType); ok {
-		match.Severity = strconv.Itoa(cct.Severity)
-		match.Tags = cct.Tags
-		match.Message = cct.Message
-
-		op, cap := getOperationAndCapabilityFromName(cct.Capability)
-
-		match.Operation = op
-		match.Resource = cap
-		match.ResourceType = "Capability"
-
-		if policyEnabled == tp.KubeArmorPolicyAudited && cct.Action == "Allow" {
-			match.Action = "Audit (" + cct.Action + ")"
-		} else if policyEnabled == tp.KubeArmorPolicyAudited && cct.Action == "Block" {
-			match.Action = "Audit (" + cct.Action + ")"
-		} else {
-			match.Action = cct.Action
-		}
-	} else if smt, ok := mp.(tp.SyscallMatchType); ok {
-		match.Severity = strconv.Itoa(smt.Severity)
-		match.Tags = smt.Tags
-		match.Message = smt.Message
-		match.Operation = "Syscall"
-		match.ResourceType = strings.ToUpper(smt.Syscalls[0])
-		match.Action = "Audit"
-	} else if smpt, ok := mp.(tp.SyscallMatchPathType); ok {
-		match.Severity = strconv.Itoa(smpt.Severity)
-		match.Tags = smpt.Tags
-		match.Message = smpt.Message
-		match.Action = "Audit"
-		match.Operation = "Syscall"
-		match.Resource = smpt.Path
-		match.ResourceType = strings.ToUpper(smpt.Syscalls[0])
-
 	} else {
 		return tp.MatchPolicy{}
 	}
@@ -407,137 +360,6 @@ func (fd *Feeder) UpdateSecurityPolicy(action string, endPoint tp.EndPoint) {
 				match.IsFromSource = len(fromSource) > 0
 				matches.Policies = append(matches.Policies, match)
 			}
-
-		}
-
-		for _, cap := range secPolicy.Spec.Capabilities.MatchCapabilities {
-			if len(cap.Capability) == 0 {
-				continue
-			}
-
-			fromSource := ""
-
-			if len(cap.FromSource) == 0 {
-				match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, cap)
-				if len(match.Resource) == 0 {
-					continue
-				}
-				matches.Policies = append(matches.Policies, match)
-				continue
-			}
-
-			for _, src := range cap.FromSource {
-				if len(src.Path) > 0 {
-					fromSource = src.Path
-				} else {
-					continue
-				}
-
-				match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, cap)
-				if len(match.Resource) == 0 {
-					continue
-				}
-				match.IsFromSource = len(fromSource) > 0
-				matches.Policies = append(matches.Policies, match)
-			}
-		}
-
-		// MatchSyscalls
-		for _, syscallRule := range secPolicy.Spec.Syscalls.MatchSyscalls {
-			if len(syscallRule.Syscalls) == 0 {
-				continue
-			}
-			fromSource := ""
-			syscall := tp.SyscallMatchType{
-				Tags:     syscallRule.Tags,
-				Message:  syscallRule.Message,
-				Severity: syscallRule.Severity,
-			}
-			if len(syscallRule.FromSource) == 0 {
-				for _, syscallName := range syscallRule.Syscalls {
-					syscall.Syscalls = []string{syscallName}
-					match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, syscall)
-					if len(match.ResourceType) == 0 {
-						continue
-					}
-					matches.Policies = append(matches.Policies, match)
-				}
-				continue
-			}
-
-			for _, src := range syscallRule.FromSource {
-				if len(src.Path) > 0 {
-					fromSource = src.Path
-				} else if len(src.Dir) > 0 {
-					fromSource = src.Dir
-					if !strings.HasSuffix(fromSource, "/") {
-						fromSource += "/"
-					}
-				} else {
-					continue
-				}
-				for _, syscallName := range syscallRule.Syscalls {
-					syscall.Syscalls = []string{syscallName}
-					match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, syscall)
-					if len(match.ResourceType) == 0 {
-						continue
-					}
-					match.IsFromSource = len(fromSource) > 0
-					match.Recursive = len(src.Path) == 0 && src.Recursive
-					matches.Policies = append(matches.Policies, match)
-				}
-
-			}
-		}
-		// SyscallsMatchPath
-		for _, syscallRule := range secPolicy.Spec.Syscalls.MatchPaths {
-			if len(syscallRule.Path) == 0 || len(syscallRule.Syscalls) == 0 {
-				continue
-			}
-			fromSource := ""
-			syscall := tp.SyscallMatchPathType{
-				Tags:     syscallRule.Tags,
-				Message:  syscallRule.Message,
-				Severity: syscallRule.Severity,
-				Path:     syscallRule.Path,
-			}
-			if len(syscallRule.FromSource) == 0 {
-				for _, syscallName := range syscallRule.Syscalls {
-					syscall.Syscalls = []string{syscallName}
-					match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, syscall)
-					if len(match.ResourceType) == 0 && len(match.Resource) == 0 {
-						continue
-					}
-					match.ReadOnly = syscallRule.Recursive
-					matches.Policies = append(matches.Policies, match)
-				}
-				continue
-			}
-
-			for _, src := range syscallRule.FromSource {
-				if len(src.Path) > 0 {
-					fromSource = src.Path
-				} else if len(src.Dir) > 0 {
-					fromSource = src.Dir
-					if !strings.HasSuffix(fromSource, "/") {
-						fromSource += "/"
-					}
-				} else {
-					continue
-				}
-				for _, syscallName := range syscallRule.Syscalls {
-					syscall.Syscalls = []string{syscallName}
-					match := fd.newMatchPolicy(endPoint.PolicyEnabled, policyName, fromSource, syscall)
-					if len(match.ResourceType) == 0 && len(match.Resource) == 0 {
-						continue
-					}
-					match.IsFromSource = len(fromSource) > 0
-					match.Recursive = len(src.Path) == 0 && src.Recursive
-					match.ReadOnly = syscallRule.Recursive
-					matches.Policies = append(matches.Policies, match)
-				}
-			}
-
 		}
 	}
 
@@ -553,38 +375,21 @@ func getDirectoryPart(path string) string {
 }
 
 // Update Log Fields based on default posture and visibility configuration and return false if no updates
-func setLogFields(log *tp.Log, existAllowPolicy bool, defaultPosture string, visibility, containerEvent bool) bool {
+func setLogFields(log *tp.Log, existAllowPolicy bool, defaultPosture string, visibility bool) {
 	if existAllowPolicy && defaultPosture == "audit" && (*log).Result == "Passed" {
-		if containerEvent {
-			(*log).Type = "MatchedPolicy"
-		} else {
-			(*log).Type = "MatchedHostPolicy"
-		}
+		(*log).Type = "MatchedPolicy"
 
 		(*log).PolicyName = "DefaultPosture"
 		(*log).Enforcer = PtraceTracer
 		(*log).Action = "Audit"
-
-		return true
+	} else {
+		(*log).Type = "ContainerLog"
 	}
-
-	if visibility {
-		if containerEvent {
-			(*log).Type = "ContainerLog"
-		} else {
-			(*log).Type = "HostLog"
-		}
-
-		return true
-	}
-
-	return false
 }
 
 func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 	existFileAllowPolicy := false
 	existNetworkAllowPolicy := false
-	existCapabilitiesAllowPolicy := false
 
 	if log.Result == "Passed" || log.Result == "Operation not permitted" || log.Result == "Permission denied" {
 
@@ -601,8 +406,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 					existFileAllowPolicy = true
 				} else if secPolicy.Operation == "Network" {
 					existNetworkAllowPolicy = true
-				} else if secPolicy.Operation == "Capabilities" {
-					existCapabilitiesAllowPolicy = true
 				}
 
 				if fd.DefaultPosture.FileAction == "allow" {
@@ -1003,46 +806,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 					log.Enforcer = PtraceEnforcer
 					log.Action = "Audit"
 				}
-			case "Syscall":
-				if secPolicy.Operation != log.Operation {
-					continue
-				}
-				//Get syscall
-				syscallName := strings.Split(strings.Split(log.Data, " ")[0], "SYS_")[1]
-				//Get syscall Source
-				syscallSource := strings.Split(log.Source, " ")[0]
-				matchedRule := false
-				if syscallName == secPolicy.ResourceType {
-					matchPath := false
-					fromSource := false
-					if secPolicy.IsFromSource &&
-						(((strings.HasPrefix(syscallSource, secPolicy.Source) && secPolicy.Source[len(secPolicy.Source)-1] == '/') && // match dir
-							(secPolicy.Recursive || !strings.Contains(syscallSource[len(secPolicy.Source):], "/"))) || // handle recursive dir
-							secPolicy.Source == syscallSource) { // match file
-						fromSource = true
-					}
-
-					if len(secPolicy.Resource) > 0 &&
-						((secPolicy.Resource[len(secPolicy.Resource)-1] == '/' && ((strings.HasPrefix(log.Resource, secPolicy.Resource) && secPolicy.ReadOnly) || secPolicy.Resource[:len(secPolicy.Resource)-1] == log.Resource)) || //match dir
-							secPolicy.Resource == log.Resource) { // match path
-						matchPath = true
-					}
-					matchedRule = (len(secPolicy.Resource) == 0 || matchPath) && (!secPolicy.IsFromSource || fromSource)
-
-					if matchedRule {
-						log.Type = "MatchedPolicy"
-						log.PolicyName = secPolicy.PolicyName
-						log.Severity = secPolicy.Severity
-						if len(secPolicy.Tags) > 0 {
-							log.Tags = strings.Join(secPolicy.Tags[:], ",")
-						}
-
-						if len(secPolicy.Message) > 0 {
-							log.Message = secPolicy.Message
-						}
-					}
-				}
-
 			}
 		}
 
@@ -1072,32 +835,19 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 				globalDefaultPosture := tp.DefaultPosture{
 					FileAction:         cfg.GlobalCfg.DefaultFilePosture,
 					NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
-					CapabilitiesAction: cfg.GlobalCfg.DefaultCapabilitiesPosture,
 				}
 				fd.DefaultPosture = globalDefaultPosture
 			}
 
 			if log.Operation == "Process" {
-				if setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, log.ProcessVisibilityEnabled, true) {
-					return log
-				}
+				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true)
+				return log
 			} else if log.Operation == "File" {
-				// TODO: visiblity
-				if setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true, true) {
-					return log
-				}
+				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true)
+				return log
 			} else if log.Operation == "Network" {
-				if setLogFields(&log, existNetworkAllowPolicy, fd.DefaultPosture.NetworkAction, log.NetworkVisibilityEnabled, true) {
-					return log
-				}
-			} else if log.Operation == "Capabilities" {
-				if setLogFields(&log, existCapabilitiesAllowPolicy, fd.DefaultPosture.CapabilitiesAction, log.CapabilitiesVisibilityEnabled, true) {
-					return log
-				}
-			} else if log.Operation == "Syscall" {
-				if setLogFields(&log, false, "", true, true) {
-					return log
-				}
+				setLogFields(&log, existNetworkAllowPolicy, fd.DefaultPosture.NetworkAction, true)
+				return log
 			}
 
 		} else if log.Type == "MatchedPolicy" {
