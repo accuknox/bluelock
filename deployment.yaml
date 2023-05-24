@@ -20,14 +20,14 @@ spec:
           name: bluelock-dir
       initContainers:
         - name: bluelock
-          image: bluelock:latest
+          image: delusionaloptimist/bluelock:latest
           imagePullPolicy: IfNotPresent
           volumeMounts:
             - mountPath: /bluelock
               name: bluelock-dir
       containers:
         - name: armored-container
-          image: socat:latest
+          image: delusionaloptimist/socat-kubearmor:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 1337
@@ -36,7 +36,7 @@ spec:
               name: bluelock-dir
           env:
           - name: "SIDEKICK_URL"
-            value: "http://kubearmor.default.svc.cluster.local:2801"
+            value: "http://kubearmor.kube-system.svc.cluster.local:2801"
             #- name: sidekick-container
             #  image: falcosecurity/falcosidekick:latest
             #  ports:
@@ -62,9 +62,18 @@ subjects:
 - kind: ServiceAccount
   name: kubearmor
   namespace: default
+- kind: ServiceAccount
+  name: kubearmor
+  namespace: kube-system
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: kubearmor
   namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubearmor
+  namespace: kube-system
