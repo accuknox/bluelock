@@ -166,6 +166,9 @@ func (t *Tracer) trace() {
 	}
 }
 
+// Permission Denied Return Code, cannot set it to -13 directly (since uint) so a workaround is used leveraging XOR
+var EPERM uint64 = ^uint64(syscall.EACCES - 1)
+
 func (t *Tracer) handle(pid int) {
 	var regs syscall.PtraceRegs
 	err := syscall.PtraceGetRegs(pid, &regs)
@@ -190,7 +193,7 @@ func (t *Tracer) handle(pid int) {
 		if match {
 			if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
+				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
@@ -203,7 +206,7 @@ func (t *Tracer) handle(pid int) {
 		}
 		if t.Rules.ProcWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
-			regs.Rax = ^uint64(syscall.EPERM)
+			regs.Rax = EPERM
 			_ = syscall.PtraceSetRegs(pid, &regs)
 			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
 			log.Action = "Block"
@@ -241,7 +244,7 @@ func (t *Tracer) handle(pid int) {
 		if match {
 			if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
+				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
@@ -254,7 +257,7 @@ func (t *Tracer) handle(pid int) {
 		}
 		if t.Rules.FileWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
-			regs.Rax = ^uint64(syscall.EPERM)
+			regs.Rax = EPERM
 			_ = syscall.PtraceSetRegs(pid, &regs)
 			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
 			log.Action = "Block"
@@ -292,7 +295,7 @@ func (t *Tracer) handle(pid int) {
 		}]; ok {
 			if val.Deny {
 				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
+				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s \n", log.Operation, log.Resource)
 				log.Action = "Block"
@@ -305,7 +308,7 @@ func (t *Tracer) handle(pid int) {
 		}]; ok {
 			if val.Deny {
 				regs.Orig_rax = ^uint64(0)
-				regs.Rax = ^uint64(syscall.EPERM)
+				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
 				kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 				log.Action = "Block"
