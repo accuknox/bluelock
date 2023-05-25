@@ -14,9 +14,9 @@ import (
 
 func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	kubearmorLog = fd.UpdateMatchedPolicy(kubearmorLog)
-	//if kubearmorLog.Source == "" {
-	//	return
-	//}
+	if kubearmorLog.Source == "" {
+		return
+	}
 
 	var payload []byte
 	var err error
@@ -31,9 +31,6 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	if fd.Output == "stdout" {
 		arr, _ := json.Marshal(kubearmorLog)
 		fmt.Println(string(arr))
-	} else if fd.Output != "none" {
-		//arr, _ := json.Marshal(kubearmorLog)
-		//fd.StrToFile(string(arr))
 	}
 
 	if kubearmorLog.Type == "MatchedPolicy" {
@@ -146,54 +143,54 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	}
 
 	/*
-	if kubearmorLog.Action == "Block" {
-		pbAlert := pb.Alert{}
-		pbAlert.ContainerID = kubearmorLog.ContainerID
-		pbAlert.ContainerName = SidekickLogger.Hostname
+		if kubearmorLog.Action == "Block" {
+			pbAlert := pb.Alert{}
+			pbAlert.ContainerID = kubearmorLog.ContainerID
+			pbAlert.ContainerName = SidekickLogger.Hostname
 
-		pbAlert.PPID = kubearmorLog.PPID
-		pbAlert.PID = kubearmorLog.PID
-		pbAlert.UID = kubearmorLog.UID
+			pbAlert.PPID = kubearmorLog.PPID
+			pbAlert.PID = kubearmorLog.PID
+			pbAlert.UID = kubearmorLog.UID
 
-		pbAlert.ParentProcessName = kubearmorLog.ParentProcessName
-		pbAlert.ProcessName = kubearmorLog.ProcessName
+			pbAlert.ParentProcessName = kubearmorLog.ParentProcessName
+			pbAlert.ProcessName = kubearmorLog.ProcessName
 
-		pbAlert.Source = kubearmorLog.Source
-		pbAlert.Operation = kubearmorLog.Operation
-		pbAlert.Resource = strings.ToValidUTF8(kubearmorLog.Resource, "")
-		pbAlert.Action = "Block"
-		pbAlert.Result = kubearmorLog.Result
-		if len(kubearmorLog.Data) > 0 {
-			pbAlert.Data = kubearmorLog.Data
-		}
-		payload, err = json.MarshalIndent(pbAlert, "", "\t")
-		if err != nil {
-			log.Println("ERROR: parsing JSON body:", err)
-		}
-	} else {
-		pbLog := pb.Log{}
-		pbLog.ContainerID = kubearmorLog.ContainerID
-		pbLog.ContainerName = SidekickLogger.Hostname
+			pbAlert.Source = kubearmorLog.Source
+			pbAlert.Operation = kubearmorLog.Operation
+			pbAlert.Resource = strings.ToValidUTF8(kubearmorLog.Resource, "")
+			pbAlert.Action = "Block"
+			pbAlert.Result = kubearmorLog.Result
+			if len(kubearmorLog.Data) > 0 {
+				pbAlert.Data = kubearmorLog.Data
+			}
+			payload, err = json.MarshalIndent(pbAlert, "", "\t")
+			if err != nil {
+				log.Println("ERROR: parsing JSON body:", err)
+			}
+		} else {
+			pbLog := pb.Log{}
+			pbLog.ContainerID = kubearmorLog.ContainerID
+			pbLog.ContainerName = SidekickLogger.Hostname
 
-		pbLog.PPID = kubearmorLog.PPID
-		pbLog.PID = kubearmorLog.PID
-		pbLog.UID = kubearmorLog.UID
+			pbLog.PPID = kubearmorLog.PPID
+			pbLog.PID = kubearmorLog.PID
+			pbLog.UID = kubearmorLog.UID
 
-		pbLog.ParentProcessName = kubearmorLog.ParentProcessName
-		pbLog.ProcessName = kubearmorLog.ProcessName
+			pbLog.ParentProcessName = kubearmorLog.ParentProcessName
+			pbLog.ProcessName = kubearmorLog.ProcessName
 
-		pbLog.Source = kubearmorLog.Source
-		pbLog.Operation = kubearmorLog.Operation
-		pbLog.Resource = strings.ToValidUTF8(kubearmorLog.Resource, "")
-		pbLog.Result = kubearmorLog.Result
-		if len(kubearmorLog.Data) > 0 {
-			pbLog.Data = kubearmorLog.Data
-		}
-		payload, err = json.MarshalIndent(pbLog, "", "\t")
-		if err != nil {
-			log.Println("ERROR: parsing JSON body:", err)
-		}
-	}*/
+			pbLog.Source = kubearmorLog.Source
+			pbLog.Operation = kubearmorLog.Operation
+			pbLog.Resource = strings.ToValidUTF8(kubearmorLog.Resource, "")
+			pbLog.Result = kubearmorLog.Result
+			if len(kubearmorLog.Data) > 0 {
+				pbLog.Data = kubearmorLog.Data
+			}
+			payload, err = json.MarshalIndent(pbLog, "", "\t")
+			if err != nil {
+				log.Println("ERROR: parsing JSON body:", err)
+			}
+		}*/
 
 	fmt.Println(string(payload))
 	req, err := http.NewRequest("POST", SidekickLogger.URL, bytes.NewBuffer(payload))

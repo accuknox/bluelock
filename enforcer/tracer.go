@@ -1,7 +1,6 @@
 package enforcer
 
 import (
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
@@ -368,8 +367,6 @@ func (t *Tracer) handle(pid int) {
 
 	// 	log.Resource = "Family=" + familyStr + " Protocol=" + protocolStr
 	// }
-	b, _ := json.MarshalIndent(log, "", "  ")
-	fmt.Print(string(b))
 	t.Logger.PushLogRelay(log)
 }
 

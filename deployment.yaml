@@ -17,23 +17,24 @@ spec:
       serviceAccountName: kubearmor
       volumes:
         - emptyDir: {}
-          name: bluelock-dir
+          name: kubearmor-dir
       initContainers:
         - name: bluelock
-          image: delusionaloptimist/bluelock:latest
-          imagePullPolicy: IfNotPresent
+          image: daemon1024/bluelock
+          imagePullPolicy: Always
           volumeMounts:
-            - mountPath: /bluelock
-              name: bluelock-dir
+            - mountPath: /kubearmor
+              name: kubearmor-dir
       containers:
         - name: armored-container
-          image: delusionaloptimist/socat-kubearmor:latest
-          imagePullPolicy: IfNotPresent
+          image: daemon1024/ka-socat-demo
+          imagePullPolicy: Always
+          command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]
           ports:
             - containerPort: 1337
           volumeMounts:
-            - mountPath: /bluelock
-              name: bluelock-dir
+            - mountPath: /kubearmor
+              name: kubearmor-dir
           env:
           - name: "SIDEKICK_URL"
             value: "http://kubearmor.kube-system.svc.cluster.local:2801"

@@ -1,5 +1,5 @@
 FROM ubuntu
 
-RUN apt update -y; apt install -y socat
+RUN apt update -y; apt install -y socat curl wget iputils-ping
 
-CMD ["/bluelock/bluelock", "socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash"]
+CMD ["socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]

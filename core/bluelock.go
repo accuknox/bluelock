@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/daemon1024/bluelock/config"
 	cfg "github.com/daemon1024/bluelock/config"
 	"github.com/daemon1024/bluelock/enforcer"
 	"github.com/daemon1024/bluelock/feeder"
@@ -62,7 +61,7 @@ var StopChan chan struct{}
 func BlueLock() {
 	dm := NewBlueLockDaemon()
 
-	if err := config.LoadConfig(); err != nil {
+	if err := cfg.LoadConfig(); err != nil {
 		kg.Err(err.Error())
 		return
 	}
@@ -79,9 +78,9 @@ func BlueLock() {
 
 	kg.Print("Initialized Kubernetes client")
 
-	dm.DefaultPosture = tp.DefaultPosture {
-		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
-		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
+	dm.DefaultPosture = tp.DefaultPosture{
+		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
+		NetworkAction: cfg.GlobalCfg.DefaultNetworkPosture,
 	}
 
 	containerID, err := GetContainerID()

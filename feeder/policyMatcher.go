@@ -834,8 +834,8 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 
 			if fd.DefaultPosture != (tp.DefaultPosture{}) {
 				globalDefaultPosture := tp.DefaultPosture{
-					FileAction:         cfg.GlobalCfg.DefaultFilePosture,
-					NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
+					FileAction:    cfg.GlobalCfg.DefaultFilePosture,
+					NetworkAction: cfg.GlobalCfg.DefaultNetworkPosture,
 				}
 				fd.DefaultPosture = globalDefaultPosture
 			}
