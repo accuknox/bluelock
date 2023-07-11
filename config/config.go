@@ -9,10 +9,14 @@ import (
 )
 
 type BluelockConfig struct {
-	LogPath           string // Log file to use
-
 	DefaultFilePosture         string // Default Enforcement Action in Global File Context
 	DefaultNetworkPosture      string // Default Enforcement Action in Global Network Context
+
+	K8sEnv bool
+
+	LogPath           string // Log file to use
+
+	RelayURL string
 }
 
 var GlobalCfg BluelockConfig
@@ -23,19 +27,35 @@ const ConfigDefaultFilePosture string = "defaultFilePosture"
 // ConfigDefaultNetworkPosture KubeArmor Default Global Network Posture key
 const ConfigDefaultNetworkPosture string = "defaultNetworkPosture"
 
+// ConfigK8sEnv VM key
+const ConfigK8sEnv string = "k8s"
+
 // ConfigLogPath Log Path key
 const ConfigLogPath string = "logPath"
 
-func readCmdLineParameters() {
-	logStr := flag.String(ConfigLogPath, "none", "log file path, {path|stdout|none}")
+const ConfigRelayURL string = "relayURL"
 
+func readCmdLineParameters() {
 	defaultFilePosture := flag.String(ConfigDefaultFilePosture, "block", "configuring default enforcement action in global file context {allow|audit|block}")
 	defaultNetworkPosture := flag.String(ConfigDefaultNetworkPosture, "block", "configuring default enforcement action in global network context {allow|audit|block}")
 
-	viper.SetDefault(ConfigLogPath, *logStr)
+	k8sEnvB := flag.Bool(ConfigK8sEnv, true, "is running with Kubernetes env?")
+
+	logStr := flag.String(ConfigLogPath, "none", "log file path, {path|stdout|none}")
+
+	relayURLStr := flag.String(ConfigRelayURL, "http://localhost:2801/", "relay server URL")
+
+	flag.Parse()
 
 	viper.SetDefault(ConfigDefaultFilePosture, *defaultFilePosture)
 	viper.SetDefault(ConfigDefaultNetworkPosture, *defaultNetworkPosture)
+
+	viper.SetDefault(ConfigK8sEnv, *k8sEnvB)
+
+	viper.SetDefault(ConfigLogPath, *logStr)
+
+	viper.SetDefault(ConfigRelayURL, *relayURLStr)
+
 }
 
 func LoadConfig() error {
@@ -56,10 +76,14 @@ func LoadConfig() error {
 		}
 	}
 
-	GlobalCfg.LogPath = viper.GetString(ConfigLogPath)
-
 	GlobalCfg.DefaultFilePosture = viper.GetString(ConfigDefaultFilePosture)
 	GlobalCfg.DefaultNetworkPosture = viper.GetString(ConfigDefaultNetworkPosture)
+
+	GlobalCfg.K8sEnv = viper.GetBool(ConfigK8sEnv)
+
+	GlobalCfg.LogPath = viper.GetString(ConfigLogPath)
+
+	GlobalCfg.RelayURL = viper.GetString(ConfigRelayURL)
 
 	kg.Printf("Final Configuration [%+v]", GlobalCfg)
 

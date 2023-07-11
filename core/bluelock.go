@@ -66,17 +66,15 @@ func BlueLock() {
 		return
 	}
 
-	dm.K8sEnabled = true
-	if !K8s.InitK8sClient() {
-		kg.Err("Failed to initialize Kubernetes client")
+	if cfg.GlobalCfg.K8sEnv {
+		dm.K8sEnabled = true
+		if !K8s.InitK8sClient() {
+			kg.Err("Failed to initialize Kubernetes client")
+			return
+		}
 
-		// destroy the daemon
-		// dm.DestroyKubeArmorDaemon()
-
-		return
+		kg.Print("Initialized Kubernetes client")
 	}
-
-	kg.Print("Initialized Kubernetes client")
 
 	dm.DefaultPosture = tp.DefaultPosture{
 		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
@@ -94,18 +92,26 @@ func BlueLock() {
 		kg.Printf("Using container ID: %s", containerID)
 
 		// if k8s
-		dm.CreateNewPod()
-		fmt.Println(dm.K8sPod)
-	}
+		if cfg.GlobalCfg.K8sEnv {
+			dm.GetPod()
 
-	// watch security policies
-	go dm.WatchSecurityPolicies()
-	kg.Printf("Started to monitor security policies")
+			dm.CreateEndpointWithPod()
+
+			// watch security policies
+			go dm.WatchSecurityPolicies()
+			kg.Printf("Started to monitor security policies")
+		} else {
+			// ECS/unorchestrated
+			kg.Printf("Started to monitor unorchestrated containers")
+		}
+	} else {
+		// host mode
+		kg.Printf("Not running inside container")
+	}
 
 	dm.Logger = feeder.NewFeeder()
 
 	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(&dm.Container, dm.Logger)
-
 	go dm.RuntimeEnforcer.StartSystemTracer()
 
 	// watch default posture
@@ -121,8 +127,11 @@ func BlueLock() {
 	// listen for interrupt signals
 	sigChan := core.GetOSSigChannel()
 	<-sigChan
-	//dm.Logger.Print("Got a signal to terminate KubeArmor")
-	close(StopChan)
+
+	// extra line for clean log
+	fmt.Println()
+	kg.Printf("Quitting Kubearmor")
+	//close(StopChan)
 
 	// destroy the daemon
 	//dm.DestroyKubeArmorDaemon()

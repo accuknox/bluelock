@@ -69,8 +69,10 @@ Modified Deployment:
             - mountPath: /kubearmor
               name: kubearmor-dir
           env:
-          - name: "SIDEKICK_URL"
+          - name: "RELAYSERVERURL"
             value: "http://kubearmor.kube-system.svc.cluster.local:2801"
+          #- name: "SIDEKICK_URL"
+          #  value: "http://kubearmor.kube-system.svc.cluster.local:2801"
       ...
 ```
 

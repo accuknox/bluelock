@@ -26,8 +26,8 @@ func init() {
 	var sidekickURL string
 	var ok bool
 
-	if sidekickURL, ok = os.LookupEnv("SIDEKICK_URL"); !ok {
-		sidekickURL = "http://localhost:2048/"
+	if sidekickURL, ok = os.LookupEnv("RELAYSERVERURL"); !ok {
+		sidekickURL = "http://localhost:2081/"
 	}
 	var err error
 	hostname, err := os.Hostname()

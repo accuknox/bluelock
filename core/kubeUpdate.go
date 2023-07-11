@@ -24,13 +24,15 @@ import (
 const PodNotFoundErr = "Matching pod not found"
 
 // Use downwards API
-func (dm *BlueLockDaemon) CreateNewPod() {
+func (dm *BlueLockDaemon) GetPod() {
 	backoff := wait.Backoff{
 		Steps: 4,
 		Duration: 1 * time.Second,
 		Factor: 5.0,
 		Jitter: 0.1,
 	}
+
+	kg.Printf("Trying to get pod info for the container ID: %s", dm.Container.ContainerID)
 
 	// get pod info
 	err := retry.OnError(backoff, func(err error) bool {
@@ -45,8 +47,6 @@ func (dm *BlueLockDaemon) CreateNewPod() {
 		kg.Errf("Failed to get pod data: %s", err.Error())
 		return
 	}
-
-	dm.CreateEndpointWithPod()
 
 	return
 }
@@ -182,26 +182,8 @@ func (dm *BlueLockDaemon) CreateEndpointWithPod() {
 
 	newPoint.DefaultPosture = dm.DefaultPosture
 
-	//dm.DefaultPosturesLock.Lock()
-	//if val, ok := dm.DefaultPostures[newPoint.NamespaceName]; ok {
-	//	newPoint.DefaultPosture = val
-	//} else {
-	//	globalDefaultPosture := tp.DefaultPosture{
-	//		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
-	//		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
-	//	}
-	//	newPoint.DefaultPosture = globalDefaultPosture
-	//}
-	//dm.DefaultPosturesLock.Unlock()
-
 	// update security policies with the identities
 	newPoint.SecurityPolicies = dm.GetSecurityPolicies(newPoint.Identities)
-
-	//dm.Logger.UpdateSecurityPolicies(action, endpoint)
-	//if dm.RuntimeEnforcer != nil {
-	//	// enforce security policies
-	//	dm.RuntimeEnforcer.UpdateRules()
-	//}
 }
 
 func (dm *BlueLockDaemon) GetSecurityPolicies(identities []string) []tp.SecurityPolicy {
