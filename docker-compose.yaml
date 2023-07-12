@@ -1,0 +1,44 @@
+version: '3.8'
+volumes:
+  kubearmor-dir: {}
+networks:
+  bluelock-test-net: {}
+services:
+  # we only use this to copy kubearmor binary to a shared vol
+  bluelock:
+    #container_name: bluelock
+    build:
+      context: .
+    image: bluelock:latest
+    volumes:
+      - kubearmor-dir:/kubearmor
+
+  # relay server
+  kubearmor-relay-server:
+    #container_name: kubearmor-relay-server
+    image: daemon1024/kubearmor-relay-server
+    #image: kubearmor-relay-server
+    networks:
+      - bluelock-test-net
+    ports:
+      - "32767:32767"
+      - "2801:2801"
+
+  # application container
+  armored-container:
+    container_name: armored-container
+    depends_on:
+      - bluelock
+    image: ka-socat:latest
+    command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]
+    volumes:
+      - kubearmor-dir:/kubearmor
+    networks:
+      - bluelock-test-net
+    ports:
+      - "1337:1337"
+        #- "32767:32767"
+    environment:
+      - RELAYSERVERURL=http://kubearmor-relay-server:2801
+      - K8S=false
+      - CONTAINERNAME=armored-container

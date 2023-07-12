@@ -27,6 +27,8 @@ type Feeder struct {
 	EnableSidekick bool
 	EnableKubearmorRelay bool
 
+	RelayServerURL string
+
 	HostName string
 }
 
@@ -49,6 +51,8 @@ func NewFeeder() *Feeder {
 
 	fd.SecurityPolicy = tp.MatchPolicies{}
 	fd.DefaultPosture = tp.DefaultPosture{}
+
+	fd.RelayServerURL = cfg.GlobalCfg.RelayServerURL
 
 	hostname, err := os.Hostname()
 	if err != nil {

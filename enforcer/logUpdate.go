@@ -22,12 +22,6 @@ func (t *Tracer) NewBaseLog() tp.Log {
 	log.ContainerImage = container.ContainerImage
 	log.ContainerID = container.ContainerID
 
-	log.PolicyEnabled = container.PolicyEnabled
-
-	log.ProcessVisibilityEnabled = container.ProcessVisibilityEnabled
-	log.FileVisibilityEnabled = container.FileVisibilityEnabled
-	log.NetworkVisibilityEnabled = container.NetworkVisibilityEnabled
-
 	log.Result = "Passed"
 
 	return log

@@ -43,11 +43,6 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 		kg.Errf("Failed to build seccomp filter: %v", err)
 	}
 
-	if len(os.Args) <= 1 {
-		kg.Errf("No command found to execute")
-		os.Exit(1)
-	}
-
 	fmt.Println("Run: ", os.Args[1:])
 
 	execPath, _ := exec.LookPath(os.Args[1])

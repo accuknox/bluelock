@@ -8,6 +8,10 @@ GOARCH := $(shell go env GOARCH)
 run: build
 	K8S=false RELAYSERVERURL="http://localhost:2801/" ./bluelock bash
 
+.PHONY: run-container
+run-container:
+	docker compose up --build
+
 .PHONY: build
 build:
 	GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -o bluelock .

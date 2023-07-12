@@ -35,10 +35,6 @@ type K8sHandler struct {
 
 var K8s *K8sHandler
 
-func init() {
-	K8s = NewK8sHandler()
-}
-
 // NewK8sHandler Function
 func NewK8sHandler() *K8sHandler {
 	kh := &K8sHandler{}

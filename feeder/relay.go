@@ -145,7 +145,7 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	// for debugging only
 	//fmt.Println(string(payload))
 
-	req, err := http.NewRequest("POST", SidekickLogger.URL, bytes.NewBuffer(payload))
+	req, err := http.NewRequest("POST", fd.RelayServerURL, bytes.NewBuffer(payload))
 	if err != nil {
 		log.Println("ERROR: pushing log:", err.Error())
 		return

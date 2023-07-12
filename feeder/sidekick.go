@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	cfg "github.com/daemon1024/bluelock/config"
 	types "github.com/falcosecurity/falcosidekick/types"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
@@ -24,11 +25,9 @@ var SidekickLogger *Logger
 
 func init() {
 	var sidekickURL string
-	var ok bool
 
-	if sidekickURL, ok = os.LookupEnv("RELAYSERVERURL"); !ok {
-		sidekickURL = "http://localhost:2081/"
-	}
+	sidekickURL = cfg.GlobalCfg.RelayServerURL
+
 	var err error
 	hostname, err := os.Hostname()
 	if err != nil {

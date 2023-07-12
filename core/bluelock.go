@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"net"
+	"os"
 	"sync"
 
 	cfg "github.com/daemon1024/bluelock/config"
@@ -9,7 +11,10 @@ import (
 	"github.com/daemon1024/bluelock/feeder"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
+	"github.com/kubearmor/KubeArmor/KubeArmor/policy"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
+	pb "github.com/kubearmor/KubeArmor/protobuf"
+	"google.golang.org/grpc"
 )
 
 type BlueLockDaemon struct {
@@ -36,6 +41,12 @@ type BlueLockDaemon struct {
 	// Logger
 	Logger *feeder.Feeder
 
+	// PolicyListener - receives policies
+	PolicyListener *grpc.Server
+	PolicyDir    string
+
+	CommandExecutableName string
+
 	// Enforcer
 	RuntimeEnforcer *enforcer.PtraceEnforcer
 }
@@ -55,19 +66,37 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	return dm
 }
 
+func (dm *BlueLockDaemon) StartPolicyListener() {
+	port := fmt.Sprintf(":%s", cfg.GlobalCfg.GRPC)
+
+	// listen to gRPC port
+	listener, err := net.Listen("tcp", port)
+	if err != nil {
+		kg.Errf("Failed to listen a port (%s, %s)", port, err.Error())
+		return
+	}
+
+	if err := dm.PolicyListener.Serve(listener); err != nil {
+		kg.Print("Terminated the gRPC service")
+	}
+}
+
 // StopChan Channel
 var StopChan chan struct{}
 
 func BlueLock() {
-	dm := NewBlueLockDaemon()
-
 	if err := cfg.LoadConfig(); err != nil {
 		kg.Err(err.Error())
 		return
 	}
 
+	dm := NewBlueLockDaemon()
+
+	dm.CommandExecutableName = os.Args[1]
+
 	if cfg.GlobalCfg.K8sEnv {
 		dm.K8sEnabled = true
+		K8s = NewK8sHandler()
 		if !K8s.InitK8sClient() {
 			kg.Err("Failed to initialize Kubernetes client")
 			return
@@ -93,6 +122,7 @@ func BlueLock() {
 
 		// if k8s
 		if cfg.GlobalCfg.K8sEnv {
+			kg.Printf("Detected Kubernetes environment")
 			dm.GetPod()
 
 			dm.CreateEndpointWithPod()
@@ -100,13 +130,37 @@ func BlueLock() {
 			// watch security policies
 			go dm.WatchSecurityPolicies()
 			kg.Printf("Started to monitor security policies")
+
 		} else {
-			// ECS/unorchestrated
-			kg.Printf("Started to monitor unorchestrated containers")
+			kg.Printf("Detected Non-Kubernetes container environment")
+
+			if cfg.GlobalCfg.ContainerName == "" {
+				kg.Errf("Environment variable CONTAINERNAME must be set in non-k8s container environments")
+				return
+			}
+
+			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
+
+			// create a log server
+			dm.PolicyListener = grpc.NewServer()
+
+			go dm.StartPolicyListener()
+
+			// unorchestrated/ECS
+			policyService := &policy.ServiceServer{}
+
+			// Policy dir
+			dm.PolicyDir = fmt.Sprintf("bluelock-%s-%s", containerID, dm.CommandExecutableName)
+
+			policyService.UpdateContainerPolicy = dm.ParseAndUpdateContainerSecurityPolicy
+			kg.Printf("Started to receive security policies on gRPC")
+
+			pb.RegisterPolicyServiceServer(dm.PolicyListener, policyService)
 		}
+
 	} else {
 		// host mode
-		kg.Printf("Not running inside container")
+		kg.Printf("Detected non-container environment. Only visibility.")
 	}
 
 	dm.Logger = feeder.NewFeeder()
@@ -114,7 +168,7 @@ func BlueLock() {
 	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(&dm.Container, dm.Logger)
 	go dm.RuntimeEnforcer.StartSystemTracer()
 
-	// watch default posture
+	// watch default posture in k8s env
 	/*
 		go dm.WatchDefaultPosture()
 		dm.Logger.Print("Started to monitor per-namespace default posture")

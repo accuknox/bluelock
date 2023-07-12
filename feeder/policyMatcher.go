@@ -1,7 +1,6 @@
 package feeder
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -428,7 +427,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			switch log.Operation {
 			case "Process", "File":
 				if secPolicy.Operation != log.Operation {
-					fmt.Println("LINE 620")
 					continue
 				}
 
@@ -863,7 +861,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			if log.Action == "Allow" && log.Result == "Passed" {
 				return tp.Log{}
 			}
-			fmt.Println("MatchedPolicy")
 
 			return log
 		}
