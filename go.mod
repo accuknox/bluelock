@@ -4,6 +4,8 @@ go 1.20
 
 replace (
 	github.com/google/gnostic => github.com/google/gnostic v0.6.8
+	github.com/kubearmor/KubeArmor => github.com/DelusionalOptimist/KubeArmor v0.0.0-20230719064213-55d16c9b345a
+	github.com/kubearmor/KubeArmor/protobuf => github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230719064213-55d16c9b345a
 	k8s.io/api => k8s.io/api v0.26.4
 	k8s.io/apimachinery => k8s.io/apimachinery v0.26.4
 	k8s.io/client-go => k8s.io/client-go v0.26.4
@@ -13,11 +15,13 @@ replace (
 require (
 	github.com/criyle/go-sandbox v0.9.15
 	github.com/falcosecurity/falcosidekick v0.0.0-20230710163659-ff247a96c9fd
+	github.com/google/uuid v1.3.0
 	github.com/kubearmor/KubeArmor/KubeArmor v0.0.0-20230704182508-0dd8f8bb9507
 	github.com/kubearmor/KubeArmor/pkg/KubeArmorController v0.0.0-20230704182508-0dd8f8bb9507
 	github.com/kubearmor/KubeArmor/protobuf v0.0.0-20230704182508-0dd8f8bb9507
 	github.com/spf13/viper v1.16.0
 	golang.org/x/exp v0.0.0-20230711023510-fffb14384f22
+	google.golang.org/grpc v1.56.2
 	sigs.k8s.io/controller-runtime v0.15.0
 )
 
@@ -46,7 +50,6 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/google/gnostic v0.6.9 // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
-	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/imdario/mergo v0.3.16 // indirect
@@ -81,7 +84,6 @@ require (
 	gomodules.xyz/jsonpatch/v2 v2.3.0 // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20230710151506-e685fd7b542b // indirect
-	google.golang.org/grpc v1.56.2 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/apiextensions-apiserver v0.27.3 // indirect
