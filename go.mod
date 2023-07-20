@@ -3,9 +3,11 @@ module github.com/daemon1024/bluelock
 go 1.20
 
 replace (
+	#github.com/kubearmor/KubeArmor => ../KubeArmor
+	#github.com/kubearmor/KubeArmor/protobuf => ../KubeArmor/protobuf
 	github.com/google/gnostic => github.com/google/gnostic v0.6.8
-	github.com/kubearmor/KubeArmor => github.com/DelusionalOptimist/KubeArmor v0.0.0-20230719064213-55d16c9b345a
-	github.com/kubearmor/KubeArmor/protobuf => github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230719064213-55d16c9b345a
+	github.com/kubearmor/KubeArmor => github.com/DelusionalOptimist/KubeArmor v0.0.0-20230724124620-b12997e641bb
+	github.com/kubearmor/KubeArmor/protobuf => github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230724124620-b12997e641bb
 	k8s.io/api => k8s.io/api v0.26.4
 	k8s.io/apimachinery => k8s.io/apimachinery v0.26.4
 	k8s.io/client-go => k8s.io/client-go v0.26.4

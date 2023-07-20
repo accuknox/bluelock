@@ -94,15 +94,15 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 
 		pbAlert.Result = kubearmorLog.Result
 
-		//AlertLock.Lock()
-		//defer AlertLock.Unlock()
+		AlertLock.Lock()
+		defer AlertLock.Unlock()
 
-		//for uid := range AlertStructs {
-		//	select {
-		//	case AlertStructs[uid].Broadcast <- &pbAlert:
-		//	default:
-		//	}
-		//}
+		for uid := range AlertStructs {
+			select {
+			case AlertStructs[uid].Broadcast <- &pbAlert:
+			default:
+			}
+		}
 
 		/* http
 		payload, err = json.MarshalIndent(pbAlert, "", "\t")

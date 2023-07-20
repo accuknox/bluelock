@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 
 	cfg "github.com/daemon1024/bluelock/config"
@@ -11,7 +12,6 @@ import (
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
-	"google.golang.org/grpc"
 )
 
 type BlueLockDaemon struct {
@@ -39,7 +39,8 @@ type BlueLockDaemon struct {
 	Logger *feeder.Feeder
 
 	// PolicyListener - receives policies
-	PolicyListener *grpc.Server
+	//PolicyListener *grpc.Server
+	PolicyClient *PolicyStreamerClient
 	PolicyDir    string
 
 	CmdExecutableName string
@@ -49,6 +50,8 @@ type BlueLockDaemon struct {
 
 	// WgDaemon Handler
 	WgDaemon sync.WaitGroup
+
+	Running bool
 }
 
 func NewBlueLockDaemon() *BlueLockDaemon {
@@ -62,6 +65,7 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	dm.SecurityPoliciesLock = new(sync.RWMutex)
 	dm.Logger = nil
 	dm.RuntimeEnforcer = nil
+	dm.Running = true
 
 	return dm
 }
@@ -86,30 +90,24 @@ func (dm *BlueLockDaemon) ServeLogFeeds() {
 }
 
 // CloseLogger Function
-//func (dm *BlueLockDaemon) CloseLogger() bool {
-//	if err := dm.Logger.DestroyFeeder(); err != nil {
-//		kg.Errf("Failed to destroy KubeArmor Logger (%s)", err.Error())
-//		return false
-//	}
-//	return true
-//}
-
-/*
-func (dm *BlueLockDaemon) StartPolicyListener() {
-	port := fmt.Sprintf(":%s", cfg.GlobalCfg.GRPC)
-
-	// listen to gRPC port
-	listener, err := net.Listen("tcp", port)
-	if err != nil {
-		kg.Errf("Failed to listen a port (%s, %s)", port, err.Error())
-		return
+func (dm *BlueLockDaemon) CloseLogger() bool {
+	if err := dm.Logger.DestroyFeeder(); err != nil {
+		kg.Errf("Failed to destroy KubeArmor Logger (%s)", err.Error())
+		return false
 	}
-
-	if err := dm.PolicyListener.Serve(listener); err != nil {
-		kg.Print("Terminated the gRPC service")
-	}
+	return true
 }
-*/
+
+// CloseLogger Function
+func (dm *BlueLockDaemon) ClosePolicyStream() bool {
+	if dm.PolicyClient != nil {
+		if err := dm.PolicyClient.DestroyClient(); err != nil {
+			kg.Errf("Failed to destroy KubeArmor Policy Client (%s)", err.Error())
+			return false
+		}
+	}
+	return true
+}
 
 func BlueLock() {
 	if err := cfg.LoadConfig(); err != nil {
@@ -136,6 +134,7 @@ func BlueLock() {
 		kg.Err("Failed to intialize KubeArmor Logger")
 		return
 	}
+	kg.Print("Initialized KubeArmor Logger")
 
 	dm.DefaultPosture = tp.DefaultPosture{
 		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
@@ -143,7 +142,6 @@ func BlueLock() {
 	}
 
 	containerID, err := GetContainerID()
-	//fmt.Println(containerID)
 	if err != nil {
 		kg.Errf("Unable to get container ID: %s", err.Error())
 	}
@@ -174,15 +172,9 @@ func BlueLock() {
 			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
 
 			// Policy dir
-			//dm.PolicyDir = filepath.Join("/opt/kubearmor/policies", fmt.Sprintf("kubearmor-%s-%s", containerID, dm.CmdExecutableName))
+			dm.PolicyDir = filepath.Join("/opt/kubearmor/policies", fmt.Sprintf("kubearmor-%s-%s", containerID, dm.CmdExecutableName))
 
-			//// unorchestrated/ECS
-			//policyService := &policy.ServiceServer{}
-
-			//policyService.UpdateContainerPolicy = dm.ParseAndUpdateContainerSecurityPolicy
-			//kg.Printf("Started to receive security policies on gRPC")
-
-			//pb.RegisterPolicyServiceServer(dm.Logger.LogServer, policyService)
+			go dm.StreamPolicies()
 		}
 
 	} else {
@@ -210,6 +202,9 @@ func BlueLock() {
 	// listen for interrupt signals
 	sigChan := core.GetOSSigChannel()
 	<-sigChan
+
+	dm.CloseLogger()
+	dm.ClosePolicyStream()
 
 	// extra line for clean log
 	fmt.Println()

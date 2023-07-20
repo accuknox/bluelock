@@ -9,21 +9,22 @@ services:
     container_name: bluelock
     build:
       context: .
-    image: bluelock:latest
+    image: delusionaloptimist/bluelock:latest
+    #image: bluelock:latest
     volumes:
       - kubearmor-dir:/kubearmor
 
   # relay server
   kubearmor-relay-server:
     container_name: kubearmor-relay-server
-    #image: daemon1024/kubearmor-relay-server
-    image: kubearmor/kubearmor-relay-server:latest
+    image: delusionaloptimist/kubearmor-relay-server:latest
+    #image: kubearmor/kubearmor-relay-server:latest
     command: ["-k8s=false"]
     networks:
       - bluelock-test-net
     ports:
-      # port on which policies are received on
-      # also logs are sent from
+      # gRPC port for relay
+      # clients and kubearmor both connect to this
       - "32767:32767"
 
   # application container
@@ -41,24 +42,7 @@ services:
       # for testing purposes
       - "1337:1337"
     environment:
-      - RELAYSERVERURL=kubearmor-relay-server:32767
+      # in docker private network container name can be used to access a container
+      - RELAYSERVERURL=http://kubearmor-relay-server:32767
       - K8S=false
       - CONTAINERNAME=armored-container
-
-  #new-container:
-  #  container_name: new-container
-  #  depends_on:
-  #    - bluelock
-  #  image: ka-socat:latest
-  #  command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]
-  #  volumes:
-  #    - kubearmor-dir:/kubearmor
-  #  networks:
-  #    - bluelock-test-net
-  #  ports:
-  #    # for testing purposes
-  #    - "1338:1337"
-  #  environment:
-  #    - RELAYSERVERURL=http://kubearmor-relay-server:2801
-  #    - K8S=false
-  #    - CONTAINERNAME=new-container

@@ -39,8 +39,8 @@ dmitri.shuralyov.com/gpu/mtl v0.0.0-20190408044501-666a987793e9/go.mod h1:H6x//7
 github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 h1:UQHMgLO+TxOElx5B5HZ4hJQsoJ/PvUvKRhJHDQXO8P8=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
 github.com/BurntSushi/xgb v0.0.0-20160522181843-27f122750802/go.mod h1:IVnqGOEym/WlBOVXweHU+Q+/VP0lqqI8lqeDx9IjBqo=
-github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230719064213-55d16c9b345a h1:B8S1JFnG+JD0DLKrqWKbydLuWU7XbLUqgZnT2xj4PvM=
-github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230719064213-55d16c9b345a/go.mod h1:u2IBmj/3GtZodhGIPlO0gwNZ+C/dDlxER1BPQfCOEsk=
+github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230724124620-b12997e641bb h1:tlStdOWDOUtjHEhp7Nx60leGB0hb2jwuFy3CITP4SyA=
+github.com/DelusionalOptimist/KubeArmor/protobuf v0.0.0-20230724124620-b12997e641bb/go.mod h1:u2IBmj/3GtZodhGIPlO0gwNZ+C/dDlxER1BPQfCOEsk=
 github.com/Masterminds/goutils v1.1.1 h1:5nUrii3FMTL5diU80unEVvNevw1nH4+ZV4DSLVJLSYI=
 github.com/Masterminds/goutils v1.1.1/go.mod h1:8cTjp+g8YejhMuvIA5y2vz3BpJxksy863GQaJW2MFNU=
 github.com/Masterminds/semver/v3 v3.2.0/go.mod h1:qvl/7zhW3nngYb5+80sSMF+FG2BjYrf8m9wsX0PNOMQ=

@@ -2,6 +2,8 @@ package common
 
 import (
 	"encoding/json"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -146,4 +148,27 @@ func ContainsElement(slice interface{}, element interface{}) bool {
 		}
 	}
 	return false
+}
+
+func GetURL(address string) (string, error) {
+	var host string
+	addr, err := url.Parse(address)
+	if err != nil || addr.Host == "" {
+		u, repErr := url.ParseRequestURI("http://" + address)
+		if repErr != nil {
+			return "", fmt.Errorf("Error while parsing URL: %s", err)
+		}
+
+		host = u.Host
+		if u.Port() == "" {
+			return fmt.Sprintf("%s:80", host), nil
+		}
+	} else {
+		host = addr.Host
+		if addr.Port() == "" {
+			return fmt.Sprintf("%s:80", host), nil
+		}
+	}
+
+	return host, nil
 }
