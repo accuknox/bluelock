@@ -6,7 +6,7 @@ GOARCH := $(shell go env GOARCH)
 
 .PHONY: run
 run: build
-	K8S=false RELAYSERVERURL="http://localhost:2801/" ./bluelock bash
+	K8S=false RELAYSERVERURL="http://localhost:32767/" ./bluelock bash
 
 .PHONY: run-container
 run-container:

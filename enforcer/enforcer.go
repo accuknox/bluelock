@@ -7,14 +7,14 @@ import (
 
 type PtraceEnforcer struct {
 	Container *tp.Container
-	Logger *feeder.Feeder
-	Rules  *RuleSet
+	Logger    *feeder.Feeder
+	Rules     *RuleSet
 }
 
 func NewPtraceEnforcer(container *tp.Container, logger *feeder.Feeder) *PtraceEnforcer {
 	return &PtraceEnforcer{
 		Container: container,
-		Logger: logger,
-		Rules:  CreateNewRuleSet(),
+		Logger:    logger,
+		Rules:     CreateNewRuleSet(),
 	}
 }

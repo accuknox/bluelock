@@ -22,7 +22,7 @@ import (
 
 var (
 	PtraceEnforcer = "Ptrace enforcer"
-	PtraceTracer = "Ptrace tracer"
+	PtraceTracer   = "Ptrace tracer"
 	//LogModeHTTP = "http"
 	//LogModeGRPC = "grpc"
 
@@ -58,15 +58,15 @@ type MessageStruct struct {
 }
 
 type Feeder struct {
-	Output string
+	Output  string
 	LogFile *os.File
 
-	SecurityPolicy tp.MatchPolicies
+	SecurityPolicy     tp.MatchPolicies
 	SecurityPolicyLock *sync.RWMutex
 
 	DefaultPosture tp.DefaultPosture
 
-	EnableSidekick bool
+	EnableSidekick       bool
 	EnableKubearmorRelay bool
 
 	RelayServerURL string
@@ -82,11 +82,11 @@ type Feeder struct {
 }
 
 type LogStreamerClient struct {
-	Conn *grpc.ClientConn
+	Conn   *grpc.ClientConn
 	Client pb.PushLogServiceClient
 
-	PushLogClient pb.PushLogService_PushLogsClient
-	PushAlertClient pb.PushLogService_PushAlertsClient
+	PushLogClient     pb.PushLogService_PushLogsClient
+	PushAlertClient   pb.PushLogService_PushAlertsClient
 	PushMessageClient pb.PushLogService_PushMessagesClient
 }
 
@@ -388,8 +388,8 @@ func (fd *Feeder) connectWithRelay() {
 	lc := &LogStreamerClient{}
 
 	kacp := keepalive.ClientParameters{
-		Time:    1 * time.Second,
-		Timeout: 5 * time.Second,
+		Time:                1 * time.Second,
+		Timeout:             5 * time.Second,
 		PermitWithoutStream: true,
 	}
 

@@ -26,17 +26,17 @@ const PodNotFoundErr = "Matching pod not found"
 // Use downwards API
 func (dm *BlueLockDaemon) GetPod() {
 	backoff := wait.Backoff{
-		Steps: 4,
+		Steps:    4,
 		Duration: 1 * time.Second,
-		Factor: 5.0,
-		Jitter: 0.1,
+		Factor:   5.0,
+		Jitter:   0.1,
 	}
 
 	kg.Printf("Trying to get pod info for the container ID: %s", dm.Container.ContainerID)
 
 	// get pod info
 	err := retry.OnError(backoff, func(err error) bool {
-		if strings.Contains(err.Error(), PodNotFoundErr){
+		if strings.Contains(err.Error(), PodNotFoundErr) {
 			kg.Printf("Re-trying to get pod info: %s", err.Error())
 			return true
 		}
@@ -678,7 +678,6 @@ func (dm *BlueLockDaemon) WatchSecurityPolicies() *http.Response {
 		//dm.Logger.Err("Couldn't start watching KubeArmor Security Policies")
 		return nil
 	}
-
 
 	go factory.Start(wait.NeverStop)
 	factory.WaitForCacheSync(wait.NeverStop)

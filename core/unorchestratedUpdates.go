@@ -21,10 +21,10 @@ import (
 )
 
 type PolicyStreamerClient struct {
-	Running bool
+	Running        bool
 	RelayServerURL string
-	Conn *grpc.ClientConn
-	Client pb.PolicyStreamServiceClient
+	Conn           *grpc.ClientConn
+	Client         pb.PolicyStreamServiceClient
 
 	ContainerPolicyClient pb.PolicyStreamService_ContainerPolicyClient
 }
@@ -69,9 +69,9 @@ func (dm *BlueLockDaemon) StreamPolicies() {
 		dm.PolicyClient.Client = nil
 
 		/*
-		if err := dm.PolicyClient.DestroyClient(); err != nil {
-			kg.Warnf("Failed to destroy the policy streamer client")
-		}*/
+			if err := dm.PolicyClient.DestroyClient(); err != nil {
+				kg.Warnf("Failed to destroy the policy streamer client")
+			}*/
 	}
 
 	return
@@ -115,8 +115,8 @@ func (ps *PolicyStreamerClient) connectWithRelay() {
 	var err error
 
 	kacp := keepalive.ClientParameters{
-		Time:    1 * time.Second,
-		Timeout: 5 * time.Second,
+		Time:                1 * time.Second,
+		Timeout:             5 * time.Second,
 		PermitWithoutStream: true,
 	}
 
@@ -493,8 +493,8 @@ func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKube
 	kg.Printf("Detected a Container Security Policy (%s/%s/%s)", strings.ToLower(event.Type), secPolicy.Metadata["namespaceName"], secPolicy.Metadata["policyName"])
 
 	globalDefaultPosture := tp.DefaultPosture{
-		FileAction:         cfg.GlobalCfg.DefaultFilePosture,
-		NetworkAction:      cfg.GlobalCfg.DefaultNetworkPosture,
+		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
+		NetworkAction: cfg.GlobalCfg.DefaultNetworkPosture,
 	}
 	newPoint.DefaultPosture = globalDefaultPosture
 
@@ -609,7 +609,7 @@ func (dm *BlueLockDaemon) backupKubeArmorContainerPolicy(policy tp.SecurityPolic
 	var file *os.File
 	var err error
 
-	if file, err = os.Create(filepath.Join(policyDir, policy.Metadata["policyName"] + ".yaml")); err == nil {
+	if file, err = os.Create(filepath.Join(policyDir, policy.Metadata["policyName"]+".yaml")); err == nil {
 		if policyBytes, err := json.Marshal(policy); err == nil {
 			if _, err = file.Write(policyBytes); err == nil {
 				if err := file.Close(); err != nil {
@@ -623,7 +623,7 @@ func (dm *BlueLockDaemon) backupKubeArmorContainerPolicy(policy tp.SecurityPolic
 // removeBackUpPolicy Function
 func (dm *BlueLockDaemon) removeBackUpPolicy(name string) {
 
-	fname := filepath.Join(dm.PolicyDir, name + ".yaml")
+	fname := filepath.Join(dm.PolicyDir, name+".yaml")
 	// Check for "/opt/kubearmor/policies" path. If dir not found, create the same
 	if _, err := os.Stat(fname); err != nil {
 		kg.Printf("Backup policy [%v] not exist", fname)

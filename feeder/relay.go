@@ -170,30 +170,30 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	//fmt.Println(string(payload))
 
 	/*
-	req, err := http.NewRequest("POST", fd.RelayServerURL, bytes.NewBuffer(payload))
-	if err != nil {
-		log.Println("ERROR: pushing log:", err.Error())
-		return
-	}
+		req, err := http.NewRequest("POST", fd.RelayServerURL, bytes.NewBuffer(payload))
+		if err != nil {
+			log.Println("ERROR: pushing log:", err.Error())
+			return
+		}
 
-	req.Header.Set("Content-Type", "application/json")
-	if kubearmorLog.Action == "Block" {
-		req.Header.Set("Telemetry", "Alert")
-	} else {
-		req.Header.Set("Telemetry", "Log")
-	}
+		req.Header.Set("Content-Type", "application/json")
+		if kubearmorLog.Action == "Block" {
+			req.Header.Set("Telemetry", "Alert")
+		} else {
+			req.Header.Set("Telemetry", "Log")
+		}
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		log.Println("ERROR: pushing log:", err.Error())
-		return
-	}
-	if resp.StatusCode != 200 {
-		log.Println("ERROR: sidekick responded with:", resp.StatusCode)
-	}
+		client := &http.Client{}
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Println("ERROR: pushing log:", err.Error())
+			return
+		}
+		if resp.StatusCode != 200 {
+			log.Println("ERROR: sidekick responded with:", resp.StatusCode)
+		}
 
-	defer resp.Body.Close()
+		defer resp.Body.Close()
 	*/
 }
 
