@@ -2,6 +2,8 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"sync"
 
 	cfg "github.com/daemon1024/bluelock/config"
@@ -36,8 +38,20 @@ type BlueLockDaemon struct {
 	// Logger
 	Logger *feeder.Feeder
 
+	// PolicyListener - receives policies
+	//PolicyListener *grpc.Server
+	PolicyClient *PolicyStreamerClient
+	PolicyDir    string
+
+	CmdExecutableName string
+
 	// Enforcer
 	RuntimeEnforcer *enforcer.PtraceEnforcer
+
+	// WgDaemon Handler
+	WgDaemon sync.WaitGroup
+
+	Running bool
 }
 
 func NewBlueLockDaemon() *BlueLockDaemon {
@@ -51,6 +65,7 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	dm.SecurityPoliciesLock = new(sync.RWMutex)
 	dm.Logger = nil
 	dm.RuntimeEnforcer = nil
+	dm.Running = true
 
 	return dm
 }
@@ -58,25 +73,68 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 // StopChan Channel
 var StopChan chan struct{}
 
-func BlueLock() {
-	dm := NewBlueLockDaemon()
+// Logger
 
+// InitLogger Function
+func (dm *BlueLockDaemon) InitLogger() bool {
+	dm.Logger = feeder.NewFeeder()
+	return dm.Logger != nil
+}
+
+// ServeLogFeeds Function
+func (dm *BlueLockDaemon) ServeLogFeeds() {
+	dm.WgDaemon.Add(1)
+	defer dm.WgDaemon.Done()
+
+	go dm.Logger.StreamLogFeeds()
+}
+
+// CloseLogger Function
+func (dm *BlueLockDaemon) CloseLogger() bool {
+	if err := dm.Logger.DestroyFeeder(); err != nil {
+		kg.Errf("Failed to destroy KubeArmor Logger (%s)", err.Error())
+		return false
+	}
+	return true
+}
+
+// CloseLogger Function
+func (dm *BlueLockDaemon) ClosePolicyStream() bool {
+	if dm.PolicyClient != nil {
+		if err := dm.PolicyClient.DestroyClient(); err != nil {
+			kg.Errf("Failed to destroy KubeArmor Policy Client (%s)", err.Error())
+			return false
+		}
+	}
+	return true
+}
+
+func BlueLock() {
 	if err := cfg.LoadConfig(); err != nil {
 		kg.Err(err.Error())
 		return
 	}
 
-	dm.K8sEnabled = true
-	if !K8s.InitK8sClient() {
-		kg.Err("Failed to initialize Kubernetes client")
+	dm := NewBlueLockDaemon()
 
-		// destroy the daemon
-		// dm.DestroyKubeArmorDaemon()
+	dm.CmdExecutableName = os.Args[1]
 
-		return
+	if cfg.GlobalCfg.K8sEnv {
+		dm.K8sEnabled = true
+		K8s = NewK8sHandler()
+		if !K8s.InitK8sClient() {
+			kg.Err("Failed to initialize Kubernetes client")
+			return
+		}
+
+		kg.Print("Initialized Kubernetes client")
 	}
 
-	kg.Print("Initialized Kubernetes client")
+	if !dm.InitLogger() {
+		kg.Err("Failed to intialize KubeArmor Logger")
+		return
+	}
+	kg.Print("Initialized KubeArmor Logger")
 
 	dm.DefaultPosture = tp.DefaultPosture{
 		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
@@ -84,7 +142,6 @@ func BlueLock() {
 	}
 
 	containerID, err := GetContainerID()
-	//fmt.Println(containerID)
 	if err != nil {
 		kg.Errf("Unable to get container ID: %s", err.Error())
 	}
@@ -94,21 +151,45 @@ func BlueLock() {
 		kg.Printf("Using container ID: %s", containerID)
 
 		// if k8s
-		dm.CreateNewPod()
-		fmt.Println(dm.K8sPod)
+		if cfg.GlobalCfg.K8sEnv {
+			kg.Printf("Detected Kubernetes environment")
+			dm.GetPod()
+
+			dm.CreateEndpointWithPod()
+
+			// watch security policies
+			go dm.WatchSecurityPolicies()
+			kg.Printf("Started to monitor security policies")
+
+		} else {
+			kg.Printf("Detected Non-Kubernetes container environment")
+
+			if cfg.GlobalCfg.ContainerName == "" {
+				kg.Errf("Environment variable CONTAINERNAME must be set in non-k8s container environments")
+				return
+			}
+
+			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
+
+			// Policy dir
+			dm.PolicyDir = filepath.Join("/opt/kubearmor/policies", fmt.Sprintf("kubearmor-%s-%s", containerID, dm.CmdExecutableName))
+
+			go dm.StreamPolicies()
+		}
+
+	} else {
+		// host mode
+		kg.Printf("Detected non-container environment. Only visibility.")
 	}
 
-	// watch security policies
-	go dm.WatchSecurityPolicies()
-	kg.Printf("Started to monitor security policies")
-
-	dm.Logger = feeder.NewFeeder()
+	// serve log feeds
+	go dm.ServeLogFeeds()
+	kg.Printf("Started to serve gRPC-based log feeds")
 
 	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(&dm.Container, dm.Logger)
-
 	go dm.RuntimeEnforcer.StartSystemTracer()
 
-	// watch default posture
+	// watch default posture in k8s env
 	/*
 		go dm.WatchDefaultPosture()
 		dm.Logger.Print("Started to monitor per-namespace default posture")
@@ -121,8 +202,14 @@ func BlueLock() {
 	// listen for interrupt signals
 	sigChan := core.GetOSSigChannel()
 	<-sigChan
-	//dm.Logger.Print("Got a signal to terminate KubeArmor")
-	close(StopChan)
+
+	dm.CloseLogger()
+	dm.ClosePolicyStream()
+
+	// extra line for clean log
+	fmt.Println()
+	kg.Printf("Quitting Kubearmor")
+	//close(StopChan)
 
 	// destroy the daemon
 	//dm.DestroyKubeArmorDaemon()

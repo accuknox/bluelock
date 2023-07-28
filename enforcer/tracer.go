@@ -42,12 +42,14 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 	if err != nil {
 		kg.Errf("Failed to build seccomp filter: %v", err)
 	}
+
 	fmt.Println("Run: ", os.Args[1:])
 
 	execPath, _ := exec.LookPath(os.Args[1])
 	bin, err := os.Open(execPath)
 	if err != nil {
 		kg.Errf("Failed to open exec file: %v", err)
+		os.Exit(1)
 	}
 	defer bin.Close()
 	cmd := forkexec.Runner{
@@ -90,8 +92,9 @@ func (t *Tracer) trace() {
 			// Ensure the process have called setpgid
 			pid, err = unix.Wait4(t.pgid, &wstatus, unix.WALL, nil)
 		}
+
 		if err != nil {
-			kg.Warnf("Couldn't wait for PID: %d. WaitStatus: %d, Error: %s", pid, &wstatus, err)
+			kg.Warnf("Couldn't wait for PID: %d. WaitStatus: %d, Error: %s", pid, wstatus, err)
 		}
 		//fmt.Println("pid: ", pid, " wstatus: ", wstatus, " err: ", err, "")
 
@@ -100,16 +103,17 @@ func (t *Tracer) trace() {
 			delete(t.traced, pid)
 			if pid == t.pgid {
 				if t.execved {
-					break
+					return
+					//break
 				}
 			}
 
 		case wstatus.Signaled():
 			sig := wstatus.Signal()
-			// if pid == t.pgid {
-			// 	delete(t.traced, pid)
-			// 	break
-			// }
+			if pid == t.pgid {
+				delete(t.traced, pid)
+				break
+			}
 			unix.PtraceCont(pid, int(sig))
 
 		case wstatus.Stopped():
@@ -158,7 +162,7 @@ func (t *Tracer) trace() {
 				}
 
 			default:
-				fmt.Println("syscall stop signal: ", stopSig)
+				//fmt.Println("syscall stop signal: ", stopSig)
 			}
 			unix.PtraceCont(pid, 0)
 		}

@@ -2,6 +2,7 @@ package config
 
 import (
 	"flag"
+	"net/url"
 	"os"
 
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
@@ -9,13 +10,22 @@ import (
 )
 
 type BluelockConfig struct {
-	LogPath           string // Log file to use
+	ContainerName string // Container name needed for unorchestrated containers
 
-	DefaultFilePosture         string // Default Enforcement Action in Global File Context
-	DefaultNetworkPosture      string // Default Enforcement Action in Global Network Context
+	DefaultFilePosture    string // Default Enforcement Action in Global File Context
+	DefaultNetworkPosture string // Default Enforcement Action in Global Network Context
+
+	K8sEnv bool
+
+	LogPath string // Log file to use
+
+	RelayServerURL string // RelayServerURL to which logs will be pushed
 }
 
 var GlobalCfg BluelockConfig
+
+// ConfigContainerName key
+const ConfigContainerName string = "containerName"
 
 // ConfigDefaultFilePosture KubeArmor Default Global File Posture key
 const ConfigDefaultFilePosture string = "defaultFilePosture"
@@ -23,19 +33,40 @@ const ConfigDefaultFilePosture string = "defaultFilePosture"
 // ConfigDefaultNetworkPosture KubeArmor Default Global Network Posture key
 const ConfigDefaultNetworkPosture string = "defaultNetworkPosture"
 
+// ConfigK8sEnv VM key
+const ConfigK8sEnv string = "k8s"
+
 // ConfigLogPath Log Path key
 const ConfigLogPath string = "logPath"
 
+// ConfigRelayServerURL Path key
+const ConfigRelayServerURL string = "relayServerURL"
+
 func readCmdLineParameters() {
-	logStr := flag.String(ConfigLogPath, "none", "log file path, {path|stdout|none}")
+	containerName := flag.String(ConfigContainerName, "", "container/service name to match policies. only needed in case of unorchestrated containers")
 
 	defaultFilePosture := flag.String(ConfigDefaultFilePosture, "block", "configuring default enforcement action in global file context {allow|audit|block}")
 	defaultNetworkPosture := flag.String(ConfigDefaultNetworkPosture, "block", "configuring default enforcement action in global network context {allow|audit|block}")
 
-	viper.SetDefault(ConfigLogPath, *logStr)
+	k8sEnvB := flag.Bool(ConfigK8sEnv, true, "is running with Kubernetes env?")
+
+	logStr := flag.String(ConfigLogPath, "none", "log file path, {path|stdout|none}")
+
+	relayServerURLStr := flag.String(ConfigRelayServerURL, "http://localhost:2801/", "relay-server http URL listening for logs")
+
+	flag.Parse()
+
+	viper.SetDefault(ConfigContainerName, *containerName)
 
 	viper.SetDefault(ConfigDefaultFilePosture, *defaultFilePosture)
 	viper.SetDefault(ConfigDefaultNetworkPosture, *defaultNetworkPosture)
+
+	viper.SetDefault(ConfigK8sEnv, *k8sEnvB)
+
+	viper.SetDefault(ConfigLogPath, *logStr)
+
+	viper.SetDefault(ConfigRelayServerURL, *relayServerURLStr)
+
 }
 
 func LoadConfig() error {
@@ -56,10 +87,19 @@ func LoadConfig() error {
 		}
 	}
 
-	GlobalCfg.LogPath = viper.GetString(ConfigLogPath)
+	relayURL, err := url.Parse(viper.GetString(ConfigRelayServerURL))
+	if err != nil {
+		return err
+	}
 
-	GlobalCfg.DefaultFilePosture = viper.GetString(ConfigDefaultFilePosture)
-	GlobalCfg.DefaultNetworkPosture = viper.GetString(ConfigDefaultNetworkPosture)
+	GlobalCfg = BluelockConfig{
+		ContainerName:         viper.GetString(ConfigContainerName),
+		DefaultFilePosture:    viper.GetString(ConfigDefaultFilePosture),
+		DefaultNetworkPosture: viper.GetString(ConfigDefaultNetworkPosture),
+		K8sEnv:                viper.GetBool(ConfigK8sEnv),
+		LogPath:               viper.GetString(ConfigLogPath),
+		RelayServerURL:        relayURL.String(),
+	}
 
 	kg.Printf("Final Configuration [%+v]", GlobalCfg)
 

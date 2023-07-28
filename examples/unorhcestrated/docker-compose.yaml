@@ -1,0 +1,52 @@
+version: '3.8'
+volumes:
+  kubearmor-dir: {}
+networks:
+  bluelock-test-net: {}
+services:
+  # we only use this to copy kubearmor binary to a shared vol
+  bluelock:
+    container_name: bluelock
+    build:
+      context: .
+    image: delusionaloptimist/bluelock:latest
+    #image: accuknox/bluelock:latest
+    volumes:
+      - kubearmor-dir:/kubearmor
+
+  # relay server
+  kubearmor-relay-server:
+    container_name: kubearmor-relay-server
+    image: delusionaloptimist/kubearmor-relay-server:latest
+    #image: kubearmor/kubearmor-relay-server:latest
+    command: ["-k8s=false"]
+    networks:
+      - bluelock-test-net
+    ports:
+      # gRPC port for relay
+      # clients and kubearmor both connect to this
+      - "32767:32767"
+
+  # application container
+  armored-container:
+    container_name: armored-container
+    depends_on:
+      - bluelock
+    image: delusionaloptimist/ka-socat:latest
+    entrypoint:
+      - "/kubearmor/bluelock"
+    command:
+      - "socat"
+      - "TCP-LISTEN:1337,reuseaddr,fork"
+      - "EXEC:bash,pty,stderr,setsid,sigint,sane"
+    volumes:
+      - kubearmor-dir:/kubearmor
+    networks:
+      - bluelock-test-net
+    ports:
+      # reverse shell for testing
+      - "1337:1337"
+    environment:
+      - RELAYSERVERURL=http://kubearmor-relay-server:32767
+      - K8S=false
+      - CONTAINERNAME=armored-container
