@@ -1,0 +1,106 @@
+{
+	"family": "armored-container",
+	"containerDefinitions": [
+		{
+			"name": "armored-container",
+			"image": "delusionaloptimist/ka-socat:latest",
+			"cpu": 0,
+			"portMappings": [
+				{
+					"name": "armored-container-1337-tcp",
+					"containerPort": 1337,
+					"hostPort": 1337,
+					"protocol": "tcp",
+					"appProtocol": "http"
+				}
+			],
+			"essential": true,
+			"command": [
+				"kubearmor/bluelock",
+				"socat",
+				"TCP-LISTEN:1337,reuseaddr,fork",
+				"EXEC:bash,pty,stderr,setsid,sigint,sane"
+			],
+			"environment": [
+				{
+					"name": "CONTAINERNAME",
+					"value": "armored-container"
+				},
+				{
+					"name": "RELAYSERVERURL",
+					"value": "http://<relay-server-host>:<port>"
+				},
+				{
+					"name": "K8S",
+					"value": "false"
+				}
+			],
+			"mountPoints": [
+				{
+					"sourceVolume": "kubearmor-dir",
+					"containerPath": "/kubearmor",
+					"readOnly": true
+				}
+			],
+			"volumesFrom": [],
+			"dependsOn": [
+				{
+					"containerName": "bluelock",
+					"condition": "SUCCESS"
+				}
+			],
+			"logConfiguration": {
+				"logDriver": "awslogs",
+				"options": {
+					"awslogs-create-group": "true",
+					"awslogs-group": "/ecs/armored-container",
+					"awslogs-region": "us-east-2",
+					"awslogs-stream-prefix": "ecs"
+				}
+			}
+		},
+		{
+			"name": "bluelock",
+			"image": "delusionaloptimist/bluelock:latest",
+			"cpu": 0,
+			"portMappings": [],
+			"essential": false,
+			"environment": [],
+			"mountPoints": [
+				{
+					"sourceVolume": "kubearmor-dir",
+					"containerPath": "/kubearmor",
+					"readOnly": false
+				}
+			],
+			"volumesFrom": [],
+			"logConfiguration": {
+				"logDriver": "awslogs",
+				"options": {
+					"awslogs-create-group": "true",
+					"awslogs-group": "/ecs/armored-container",
+					"awslogs-region": "us-east-2",
+					"awslogs-stream-prefix": "ecs"
+				}
+			}
+		}
+	],
+	"taskRoleArn": "<REDACTED>",
+	"executionRoleArn": "<REDACTED>",
+	"networkMode": "awsvpc",
+	"volumes": [
+		{
+			"name": "kubearmor-dir",
+			"host": {}
+		}
+	],
+	"requiresCompatibilities": [
+		"FARGATE"
+	],
+	"cpu": "256",
+	"memory": "512",
+	"runtimePlatform": {
+		"cpuArchitecture": "X86_64",
+		"operatingSystemFamily": "LINUX"
+	}
+}

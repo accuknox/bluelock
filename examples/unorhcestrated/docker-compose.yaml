@@ -10,7 +10,7 @@ services:
     build:
       context: .
     image: delusionaloptimist/bluelock:latest
-    #image: bluelock:latest
+    #image: accuknox/bluelock:latest
     volumes:
       - kubearmor-dir:/kubearmor
 
@@ -32,17 +32,21 @@ services:
     container_name: armored-container
     depends_on:
       - bluelock
-    image: ka-socat:latest
-    command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]
+    image: delusionaloptimist/ka-socat:latest
+    entrypoint:
+      - "/kubearmor/bluelock"
+    command:
+      - "socat"
+      - "TCP-LISTEN:1337,reuseaddr,fork"
+      - "EXEC:bash,pty,stderr,setsid,sigint,sane"
     volumes:
       - kubearmor-dir:/kubearmor
     networks:
       - bluelock-test-net
     ports:
-      # for testing purposes
+      # reverse shell for testing
       - "1337:1337"
     environment:
-      # in docker private network container name can be used to access a container
       - RELAYSERVERURL=http://kubearmor-relay-server:32767
       - K8S=false
       - CONTAINERNAME=armored-container

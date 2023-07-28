@@ -10,9 +10,6 @@ spec:
   - name: "grpc-port"
     port: 32767
     protocol: TCP
-  - name: "http-port"
-    port: 2801
-    protocol: TCP
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -40,7 +37,6 @@ spec:
         imagePullPolicy: Always
         ports:
         - containerPort: 32767
-        - containerPort: 2801
         resources:
           requests:
             cpu: 250m

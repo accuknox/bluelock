@@ -1,0 +1,95 @@
+{
+	"family": "<task-family-name>",
+	"containerDefinitions": [
+		{
+			"name": "<container-name>",
+			"image": "<your-image>",
+			"cpu": 0,
+			"essential": true,
+			"command": [
+				"kubearmor/bluelock",
+				"<your-command>"
+			],
+			"environment": [
+				{
+					"name": "K8S",
+					"value": "false"
+				},
+				{
+					"name": "CONTAINERNAME",
+					"value": "<container-name>"
+				},
+				{
+					"name": "RELAYSERVERURL",
+					"value": "http://<relay-server-host>:<port>"
+				}
+			],
+			"mountPoints": [
+				{
+					"sourceVolume": "kubearmor-dir",
+					"containerPath": "/kubearmor",
+					"readOnly": true
+				}
+			],
+			"volumesFrom": [],
+			"dependsOn": [
+				{
+					"containerName": "bluelock",
+					"condition": "SUCCESS"
+				}
+			],
+			"logConfiguration": {
+				"logDriver": "awslogs",
+				"options": {
+					"awslogs-create-group": "true",
+					"awslogs-group": "/ecs/<task-family>",
+					"awslogs-region": "us-east-2",
+					"awslogs-stream-prefix": "ecs"
+				}
+			}
+		},
+		{
+			"name": "bluelock",
+			"image": "delusionaloptimist/bluelock:latest",
+			"cpu": 0,
+			"portMappings": [],
+			"essential": false,
+			"environment": [],
+			"mountPoints": [
+				{
+					"sourceVolume": "kubearmor-dir",
+					"containerPath": "/kubearmor",
+					"readOnly": false
+				}
+			],
+			"volumesFrom": [],
+			"logConfiguration": {
+				"logDriver": "awslogs",
+				"options": {
+					"awslogs-create-group": "true",
+					"awslogs-group": "/ecs/<task-family>",
+					"awslogs-region": "us-east-2",
+					"awslogs-stream-prefix": "ecs"
+				}
+			}
+		}
+	],
+	"taskRoleArn": "<REDACTED>",
+	"executionRoleArn": "<REDACTED>",
+	"networkMode": "awsvpc",
+	"volumes": [
+		{
+			"name": "kubearmor-dir",
+			"host": {}
+		}
+	],
+	"requiresCompatibilities": [
+		"FARGATE"
+	],
+	"cpu": "256",
+	"memory": "512",
+	"runtimePlatform": {
+		"cpuArchitecture": "X86_64",
+		"operatingSystemFamily": "LINUX"
+	}
+}

@@ -21,6 +21,7 @@ spec:
       initContainers:
         - name: bluelock
           image: daemon1024/bluelock
+            #image: accuknox/bluelock
           imagePullPolicy: Always
           volumeMounts:
             - mountPath: /kubearmor
@@ -28,8 +29,14 @@ spec:
       containers:
         - name: armored-container
           image: daemon1024/ka-socat-demo
+            #image: accuknox/ka-socat-demo
           imagePullPolicy: Always
-          command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"]
+          command:
+            - "/kubearmor/bluelock"
+          args:
+            - "socat"
+            - "TCP-LISTEN:1337,reuseaddr,fork"
+            - "EXEC:bash,pty,stderr,setsid,sigint,sane"
           ports:
             - containerPort: 1337
           volumeMounts:
@@ -37,19 +44,7 @@ spec:
               name: kubearmor-dir
           env:
           - name: "RELAYSERVERURL"
-            value: "http://kubearmor.kube-system.svc.cluster.local:2801"
-            #- name: sidekick-container
-            #  image: falcosecurity/falcosidekick:latest
-            #  ports:
-            #    - name: sidekick-port
-            #      containerPort: 2801
-            #  env:
-            #    - name: "DEBUG"
-            #      value: "true"
-            #    - name: "DISCORD_WEBHOOKURL"
-            #      value: "https://discord.com/api/webhooks/1093242887153659965/WYPwFw34KfU-2p587Iw1b9hrn2t8cEqsNzoBmaZiHqRvNGwN3neAIQjBd8PxlR_n0qrh"
-            #    - name: "DISCORD_MINIMUMPRIORITY"
-            #      value: "debug"
+            value: "http://kubearmor.kube-system.svc.cluster.local:32767"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding

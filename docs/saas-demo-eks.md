@@ -23,7 +23,6 @@
 ![](https://hackmd.io/_uploads/S12tfh6rn.png)
 
 
-
 # Deployment Modification to add runtime protection to your workload
 
 The parent binary responsible for runtime security is portable. We need to mount it to the container have it spawn the entrypoint.
@@ -70,9 +69,7 @@ Modified Deployment:
               name: kubearmor-dir
           env:
           - name: "RELAYSERVERURL"
-            value: "http://kubearmor.kube-system.svc.cluster.local:2801"
-          #- name: "SIDEKICK_URL"
-          #  value: "http://kubearmor.kube-system.svc.cluster.local:2801"
+            value: "http://kubearmor.kube-system.svc.cluster.local:32767"
       ...
 ```
 
