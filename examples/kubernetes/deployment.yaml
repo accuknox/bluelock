@@ -4,6 +4,7 @@ metadata:
   name: armored-application
   labels:
     deployment: armored-application
+  namespace: bluelock
 spec:
   replicas: 1
   selector:
@@ -14,21 +15,21 @@ spec:
       labels:
         kubearmor.io/container.name: armored-container
     spec:
-      serviceAccountName: kubearmor
+      serviceAccountName: bluelock
       volumes:
         - emptyDir: {}
-          name: kubearmor-dir
+          name: bluelock-dir
       initContainers:
         - name: bluelock
-          image: daemon1024/bluelock
+          image: delusionaloptimist/bluelock
             #image: accuknox/bluelock
           imagePullPolicy: Always
           volumeMounts:
             - mountPath: /kubearmor
-              name: kubearmor-dir
+              name: bluelock-dir
       containers:
         - name: armored-container
-          image: daemon1024/ka-socat-demo
+          image: delusionaloptimist/ka-socat
             #image: accuknox/ka-socat-demo
           imagePullPolicy: Always
           command:
@@ -41,35 +42,30 @@ spec:
             - containerPort: 1337
           volumeMounts:
             - mountPath: /kubearmor
-              name: kubearmor-dir
+              name: bluelock-dir
           env:
           - name: "RELAYSERVERURL"
-            value: "http://kubearmor.kube-system.svc.cluster.local:32767"
+            value: "http://bluelock.bluelock.svc.cluster.local:32767"
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
 metadata:
-  name: kubearmor-clusterrolebinding
+  name: bluelock-clusterrolebinding
+  namespace: bluelock
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: cluster-admin
 subjects:
 - kind: ServiceAccount
-  name: kubearmor
+  name: bluelock
   namespace: default
 - kind: ServiceAccount
-  name: kubearmor
-  namespace: kube-system
+  name: bluelock
+  namespace: bluelock
 ---
 apiVersion: v1
 kind: ServiceAccount
 metadata:
-  name: kubearmor
-  namespace: default
----
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: kubearmor
-  namespace: kube-system
+  name: bluelock
+  namespace: bluelock

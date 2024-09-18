@@ -10,7 +10,7 @@ run: build
 
 .PHONY: run-container
 run-container:
-	docker compose up --build -f deployments/unorchestrated/docker-compose.yaml
+	docker compose -f examples/unorhcestrated/docker-compose.yaml --project-directory . up --build
 
 .PHONY: build
 build:

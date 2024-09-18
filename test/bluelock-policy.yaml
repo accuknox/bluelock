@@ -10,17 +10,14 @@ spec:
   selector:
     matchLabels:
       kubearmor.io/container.name: armored-container
-  process:
-    matchPaths:
-      - path: /usr/bin/ls
-      - path: /usr/bin/cat
-  network:
-    matchProtocols:
-      - protocol: tcp
-        fromSource:
-        - path: /usr/bin/curl
+        #process:
+        #  matchPaths:
+        #    - path: /usr/bin/ls
+        #      #- path: /usr/bin/cat
   file:
     matchPaths:
-    - path: /app/README.md
+    - path: /file0.txt
+      fromSource:
+        - path: /usr/bin/rm
   action:
     Block

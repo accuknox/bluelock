@@ -30,6 +30,8 @@ services:
   # application container
   armored-container:
     container_name: armored-container
+    build:
+      context: ./test
     depends_on:
       - bluelock
     image: delusionaloptimist/ka-socat:latest
