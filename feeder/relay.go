@@ -94,12 +94,12 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 
 		pbAlert.Result = kubearmorLog.Result
 
-		AlertLock.Lock()
-		defer AlertLock.Unlock()
+		fd.EventStructs.AlertLock.Lock()
+		defer fd.EventStructs.AlertLock.Unlock()
 
-		for uid := range AlertStructs {
+		for uid := range fd.EventStructs.AlertStructs {
 			select {
-			case AlertStructs[uid].Broadcast <- &pbAlert:
+			case fd.EventStructs.AlertStructs[uid].Broadcast <- &pbAlert:
 			default:
 			}
 		}
@@ -148,12 +148,12 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 
 		pbLog.Result = kubearmorLog.Result
 
-		LogLock.Lock()
-		defer LogLock.Unlock()
+		fd.EventStructs.LogLock.Lock()
+		defer fd.EventStructs.LogLock.Unlock()
 
-		for uid := range LogStructs {
+		for uid := range fd.EventStructs.LogStructs {
 			select {
-			case LogStructs[uid].Broadcast <- &pbLog:
+			case fd.EventStructs.LogStructs[uid].Broadcast <- &pbLog:
 			default:
 			}
 		}

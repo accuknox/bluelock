@@ -453,19 +453,9 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 
 						matchedFlags := false
 
-						if secPolicy.ReadOnly && log.Resource != "" && secPolicy.OwnerOnly && log.MergedDir != "" {
-							// read only && owner only
-							if strings.Contains(log.Data, "O_RDONLY") && strconv.Itoa(int(log.UID)) == getFileProcessUID(log.MergedDir+log.Resource) {
-								matchedFlags = true
-							}
-						} else if secPolicy.ReadOnly && log.Resource != "" {
+						if secPolicy.ReadOnly && log.Resource != "" {
 							// read only
 							if strings.Contains(log.Data, "O_RDONLY") {
-								matchedFlags = true
-							}
-						} else if secPolicy.OwnerOnly && log.MergedDir != "" {
-							// owner only
-							if strconv.Itoa(int(log.UID)) == getFileProcessUID(log.MergedDir+log.Resource) {
 								matchedFlags = true
 							}
 						} else {

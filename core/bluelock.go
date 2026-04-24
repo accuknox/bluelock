@@ -9,12 +9,25 @@ import (
 	cfg "github.com/daemon1024/bluelock/config"
 	"github.com/daemon1024/bluelock/enforcer"
 	"github.com/daemon1024/bluelock/feeder"
+	"github.com/daemon1024/bluelock/state"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
+	pb "github.com/kubearmor/KubeArmor/protobuf"
+	"google.golang.org/grpc/health"
+	"google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/reflection"
 )
 
 type BlueLockDaemon struct {
+	// node
+	Node     tp.Node
+	NodeLock *sync.RWMutex
+
+	// containers (from docker)
+	Containers     map[string]tp.Container
+	ContainersLock *sync.RWMutex
+
 	// K8s specific
 	// whether running in K8s cluster
 	K8sEnabled bool
@@ -38,15 +51,19 @@ type BlueLockDaemon struct {
 	// Logger
 	Logger *feeder.Feeder
 
-	// PolicyListener - receives policies
 	//PolicyListener *grpc.Server
-	PolicyClient *PolicyStreamerClient
-	PolicyDir    string
+	PolicyDir string
 
 	CmdExecutableName string
 
 	// Enforcer
 	RuntimeEnforcer *enforcer.PtraceEnforcer
+
+	// State Agent
+	StateAgent *state.StateAgent
+
+	// health-server
+	GRPCHealthServer *health.Server
 
 	// WgDaemon Handler
 	WgDaemon sync.WaitGroup
@@ -56,6 +73,12 @@ type BlueLockDaemon struct {
 
 func NewBlueLockDaemon() *BlueLockDaemon {
 	dm := new(BlueLockDaemon)
+
+	dm.Node = tp.Node{}
+	dm.NodeLock = new(sync.RWMutex)
+
+	dm.Containers = map[string]tp.Container{}
+	dm.ContainersLock = new(sync.RWMutex)
 
 	dm.K8sEnabled = false
 	dm.K8sPod = tp.K8sPod{}
@@ -86,7 +109,7 @@ func (dm *BlueLockDaemon) ServeLogFeeds() {
 	dm.WgDaemon.Add(1)
 	defer dm.WgDaemon.Done()
 
-	go dm.Logger.StreamLogFeeds()
+	go dm.Logger.ServeLogFeeds()
 }
 
 // CloseLogger Function
@@ -98,15 +121,29 @@ func (dm *BlueLockDaemon) CloseLogger() bool {
 	return true
 }
 
-// CloseLogger Function
-func (dm *BlueLockDaemon) ClosePolicyStream() bool {
-	if dm.PolicyClient != nil {
-		if err := dm.PolicyClient.DestroyClient(); err != nil {
-			kg.Errf("Failed to destroy KubeArmor Policy Client (%s)", err.Error())
-			return false
-		}
+func (dm *BlueLockDaemon) SetHealthStatus(serviceName string, healthStatus grpc_health_v1.HealthCheckResponse_ServingStatus) error {
+	if dm.GRPCHealthServer != nil {
+		dm.GRPCHealthServer.SetServingStatus(serviceName, healthStatus)
+		return nil
 	}
-	return true
+
+	return fmt.Errorf("GRPC health server is not initialized")
+}
+
+func (dm *BlueLockDaemon) InitStateAgent() error {
+	dm.StateAgent = state.NewStateAgent(&dm.Node, dm.NodeLock, dm.Containers, dm.ContainersLock)
+	if dm.StateAgent == nil {
+		return fmt.Errorf("failed to create state agent")
+	}
+	return nil
+}
+
+// CloseStateAgent Function
+func (dm *BlueLockDaemon) CloseStateAgent() error {
+	if err := dm.StateAgent.DestroyStateAgent(); err != nil {
+		return fmt.Errorf("failed to destroy State Agent: %w", err)
+	}
+	return nil
 }
 
 func BlueLock() {
@@ -135,6 +172,12 @@ func BlueLock() {
 		return
 	}
 	kg.Print("Initialized KubeArmor Logger")
+
+	// health server
+	if dm.Logger.LogServer != nil {
+		dm.GRPCHealthServer = health.NewServer()
+		grpc_health_v1.RegisterHealthServer(dm.Logger.LogServer, dm.GRPCHealthServer)
+	}
 
 	dm.DefaultPosture = tp.DefaultPosture{
 		FileAction:    cfg.GlobalCfg.DefaultFilePosture,
@@ -171,10 +214,63 @@ func BlueLock() {
 
 			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
 
+			nodeData, containers, err := GetFargateMetadata()
+			if err == nil {
+				kg.Printf("Fetched node info NAME=%s", nodeData.NodeName)
+				dm.NodeLock.Lock()
+				dm.Node = nodeData
+				dm.NodeLock.Unlock()
+
+				kg.Printf("Fetched %d containers", len(containers))
+				dm.ContainersLock.Lock()
+				dm.Containers = containers
+				dm.ContainersLock.Unlock()
+			} else {
+				kg.Errf("Error fetching Fargate metadata: %v", err.Error())
+				dm.ContainersLock.Lock()
+				dm.Container.NamespaceName = "container_namespace"
+				dm.Containers[containerID] = dm.Container
+				dm.ContainersLock.Unlock()
+			}
+
 			// Policy dir
 			dm.PolicyDir = filepath.Join("/opt/kubearmor/policies", fmt.Sprintf("kubearmor-%s-%s", containerID, dm.CmdExecutableName))
 
-			go dm.StreamPolicies()
+			policyService := &PolicyServer{
+				ContainerPolicyEnabled: true,
+				UpdateContainerPolicy:  dm.ParseAndUpdateContainerSecurityPolicy,
+			}
+			pb.RegisterPolicyServiceServer(dm.Logger.LogServer, policyService)
+
+			if err := dm.SetHealthStatus(pb.PolicyService_ServiceDesc.ServiceName, grpc_health_v1.HealthCheckResponse_SERVING); err != nil {
+				kg.Errf("Failed to set health status for PolicyService: %v", err)
+			}
+
+			if !dm.K8sEnabled && cfg.GlobalCfg.StateAgent {
+				// initialize state agent
+				if err := dm.InitStateAgent(); err != nil {
+					kg.Errf("Failed to initialize State Agent Server: %s", err.Error())
+
+					// destroy the daemon
+					// dm.DestroyKubeArmorDaemon()
+
+					return
+				}
+				kg.Print("Initialized State Agent Server")
+
+				pb.RegisterStateAgentServer(dm.Logger.LogServer, dm.StateAgent)
+				if err := dm.SetHealthStatus(pb.StateAgent_ServiceDesc.ServiceName, grpc_health_v1.HealthCheckResponse_SERVING); err != nil {
+					kg.Warnf("Failed to set health status for StateAgent: %v", err)
+				}
+			}
+
+			if dm.StateAgent != nil {
+				go dm.StateAgent.PushNodeEvent(dm.Node, state.EventAdded)
+
+				for _, c := range containers {
+					dm.StateAgent.PushContainerEvent(c, state.EventAdded)
+				}
+			}
 		}
 
 	} else {
@@ -182,9 +278,14 @@ func BlueLock() {
 		kg.Printf("Detected non-container environment. Only visibility.")
 	}
 
+	reflection.Register(dm.Logger.LogServer)
+
 	// serve log feeds
 	go dm.ServeLogFeeds()
 	kg.Printf("Started to serve gRPC-based log feeds")
+	if err := dm.SetHealthStatus(pb.LogService_ServiceDesc.ServiceName, grpc_health_v1.HealthCheckResponse_SERVING); err != nil {
+		kg.Warnf("Failed to set health status for LogService: %v", err)
+	}
 
 	dm.RuntimeEnforcer = enforcer.NewPtraceEnforcer(&dm.Container, dm.Logger)
 	go dm.RuntimeEnforcer.StartSystemTracer()
@@ -204,7 +305,6 @@ func BlueLock() {
 	<-sigChan
 
 	dm.CloseLogger()
-	dm.ClosePolicyStream()
 
 	// extra line for clean log
 	fmt.Println()

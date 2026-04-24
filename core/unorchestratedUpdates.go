@@ -3,185 +3,59 @@ package core
 import (
 	"context"
 	"encoding/json"
-	"math/rand"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
-	"github.com/daemon1024/bluelock/common"
 	kl "github.com/daemon1024/bluelock/common"
 	cfg "github.com/daemon1024/bluelock/config"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	pb "github.com/kubearmor/KubeArmor/protobuf"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/keepalive"
 )
 
-type PolicyStreamerClient struct {
-	Running        bool
-	RelayServerURL string
-	Conn           *grpc.ClientConn
-	Client         pb.PolicyStreamServiceClient
-
-	ContainerPolicyClient pb.PolicyStreamService_ContainerPolicyClient
+// PolicyServer provides structure to serve Policy gRPC service
+type PolicyServer struct {
+	pb.PolicyServiceServer
+	UpdateContainerPolicy  func(tp.K8sKubeArmorPolicyEvent) pb.PolicyStatus
+	ContainerPolicyEnabled bool
 }
 
-func NewPolicyStreamer() *PolicyStreamerClient {
-	return &PolicyStreamerClient{
-		Running: true,
+// ContainerPolicy accepts container events on gRPC and update container security policies
+func (p *PolicyServer) ContainerPolicy(c context.Context, data *pb.Policy) (*pb.Response, error) {
+	res := new(pb.Response)
+	if !p.ContainerPolicyEnabled {
+		res.Status = pb.PolicyStatus_NotEnabled
+		kg.Warn("Container policies are not enabled")
+		return res, nil
 	}
-}
+	policyEvent := tp.K8sKubeArmorPolicyEvent{}
+	err := json.Unmarshal(data.Policy, &policyEvent)
 
-func (dm *BlueLockDaemon) StreamPolicies() {
-	dm.PolicyClient = NewPolicyStreamer()
+	if err == nil {
 
-	address, err := common.GetURL(cfg.GlobalCfg.RelayServerURL)
-	if err != nil {
-		kg.Errf("Failed to parse Relay Server URL: %s", err.Error())
-		return
-	}
+		if policyEvent.Object.Metadata.Name != "" {
 
-	dm.PolicyClient.RelayServerURL = address
+			res.Status = p.UpdateContainerPolicy(policyEvent)
 
-	for dm.PolicyClient.Running {
-		dm.PolicyClient.connectWithRelay()
-		if dm.PolicyClient == nil {
-			kg.Errf("Error while connecting with relay for streaming policies")
-			return
+		} else {
+			res.Status = pb.PolicyStatus_Invalid
+			kg.Warn("Empty Container Policy Event")
 		}
 
-		kg.Printf("Connected with Relay server for streaming policies")
+	} else {
 
-		dm.WgDaemon.Add(1)
-		go dm.GetPolicies()
-		kg.Printf("Started to stream policies")
+		kg.Warn("Invalid Container Policy Event")
 
-		dm.WgDaemon.Wait()
-
-		if err := dm.PolicyClient.Conn.Close(); err != nil {
-			kg.Warnf("Failed to delete PolicyClient: %s", err.Error())
-		}
-		kg.Printf("Closed policy client for %s", address)
-
-		dm.PolicyClient.Client = nil
-
-		/*
-			if err := dm.PolicyClient.DestroyClient(); err != nil {
-				kg.Warnf("Failed to destroy the policy streamer client")
-			}*/
+		res.Status = pb.PolicyStatus_Invalid
 	}
 
-	return
-}
-
-// DoHealthCheck Function
-func (ps *PolicyStreamerClient) DoHealthCheck() bool {
-	// #nosec
-	randNum := rand.Int31()
-
-	// send a nonce
-	nonce := pb.HealthCheckReq{Nonce: randNum}
-	res, err := ps.Client.HealthCheck(context.Background(), &nonce)
-	if err != nil {
-		kg.Warnf("Relay server health check failed. %s", err)
-		return false
-	}
-
-	// check nonce
-	if randNum != res.Retval {
-		return false
-	}
-
-	return true
-}
-
-func (ps *PolicyStreamerClient) DestroyClient() error {
-	ps.Running = false
-
-	if ps.Conn != nil {
-		if err := ps.Conn.Close(); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-// TODO: use single gRPC connection for both the clients
-func (ps *PolicyStreamerClient) connectWithRelay() {
-	var err error
-
-	kacp := keepalive.ClientParameters{
-		Time:                1 * time.Second,
-		Timeout:             5 * time.Second,
-		PermitWithoutStream: true,
-	}
-
-	address := ps.RelayServerURL
-	for ps.Running {
-		conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithKeepaliveParams(kacp), grpc.WithBlock())
-		if err != nil {
-			kg.Warnf("Failed to connect to relay's gRPC listener. %s", err.Error())
-			time.Sleep(time.Second * 5)
-			conn.Close()
-			continue
-		}
-
-		ps.Conn = conn
-
-		client := pb.NewPolicyStreamServiceClient(conn)
-
-		ps.Client = client
-
-		if ok := ps.DoHealthCheck(); !ok {
-			kg.Warnf("ContainerPolicy server is unhealthy")
-			time.Sleep(time.Second * 5)
-			conn.Close()
-			continue
-		}
-
-		break
-	}
-
-	ps.ContainerPolicyClient, err = ps.Client.ContainerPolicy(context.Background())
-	if err != nil {
-		kg.Warnf("Failed to start ContainerPolicy stream reader err=%s", err.Error())
-	}
-
-	return
-}
-
-func (dm *BlueLockDaemon) GetPolicies() {
-	defer dm.WgDaemon.Done()
-	pc := dm.PolicyClient
-	var err error
-	for pc.Running {
-		var res *pb.Policy
-
-		if res, err = pc.ContainerPolicyClient.Recv(); err != nil {
-			kg.Warnf("Failed to receive a policy %s", err)
-			break
-		}
-
-		policyEvent := tp.K8sKubeArmorPolicyEvent{}
-
-		//if err := kl.Clone(res.Policy, &policyEvent); err != nil {
-		if err := json.Unmarshal(res.Policy, &policyEvent); err != nil {
-			kg.Warnf("GetPolicies: Failed to clone a policy: %s", err)
-			continue
-		}
-
-		go dm.ParseAndUpdateContainerSecurityPolicy(policyEvent)
-	}
-
-	return
+	return res, nil
 }
 
 // ParseAndUpdateContainerSecurityPolicy Function
-func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKubeArmorPolicyEvent) {
+func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKubeArmorPolicyEvent) pb.PolicyStatus {
 	// create a container security policy
 	secPolicy := tp.SecurityPolicy{}
 
@@ -191,12 +65,12 @@ func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKube
 
 	if err := kl.Clone(event.Object.Spec, &secPolicy.Spec); err != nil {
 		kg.Errf("Failed to clone a spec (%s)", err.Error())
-		return
+		return pb.PolicyStatus_Failure
 	}
 
 	// return if current policy is not for this container
 	if secPolicy.Spec.Selector.MatchLabels["kubearmor.io/container.name"] != dm.Container.ContainerName && secPolicy.Spec.Selector.MatchLabels["kubearmor.io/container.name"] != "*" {
-		return
+		return pb.PolicyStatus_Failure
 	}
 
 	newPoint := dm.EndPoint
@@ -228,7 +102,7 @@ func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKube
 			//containername = v
 		} else {
 			kg.Warnf("Fail to apply policy. The MatchLabels container name key should be `kubearmor.io/container.name` ")
-			return
+			return pb.PolicyStatus_Failure
 		}
 	}
 
@@ -510,7 +384,7 @@ func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKube
 	// policy doesn't exist and the policy is being removed
 	if policymatch == 0 && event.Type == "DELETED" {
 		kg.Warnf("Failed to delete security policy. Policy doesn't exist")
-		return
+		return pb.PolicyStatus_Failure
 	}
 
 	for idx, policy := range newPoint.SecurityPolicies {
@@ -593,6 +467,15 @@ func (dm *BlueLockDaemon) ParseAndUpdateContainerSecurityPolicy(event tp.K8sKube
 			dm.removeBackUpPolicy(secPolicy.Metadata["policyName"])
 		}
 	}
+
+	switch event.Type {
+	case "ADDED":
+		return pb.PolicyStatus_Applied
+	case "DELETED":
+		return pb.PolicyStatus_Deleted
+	}
+
+	return pb.PolicyStatus_Modified
 }
 
 // Back up KubeArmor container policies in /opt/kubearmor/policies

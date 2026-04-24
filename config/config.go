@@ -20,6 +20,8 @@ type BluelockConfig struct {
 	LogPath string // Log file to use
 
 	RelayServerURL string // RelayServerURL to which logs will be pushed
+
+	StateAgent bool // enable KubeArmor state agent
 }
 
 var GlobalCfg BluelockConfig
@@ -39,6 +41,9 @@ const ConfigK8sEnv string = "k8s"
 // ConfigLogPath Log Path key
 const ConfigLogPath string = "logPath"
 
+// ConfigStateAgent State Agent key
+const ConfigStateAgent string = "enableKubeArmorStateAgent"
+
 // ConfigRelayServerURL Path key
 const ConfigRelayServerURL string = "relayServerURL"
 
@@ -52,6 +57,8 @@ func readCmdLineParameters() {
 
 	logStr := flag.String(ConfigLogPath, "none", "log file path, {path|stdout|none}")
 
+	stateAgent := flag.Bool(ConfigStateAgent, true, "enabling KubeArmor State Agent client")
+
 	relayServerURLStr := flag.String(ConfigRelayServerURL, "http://localhost:2801/", "relay-server http URL listening for logs")
 
 	flag.Parse()
@@ -64,6 +71,8 @@ func readCmdLineParameters() {
 	viper.SetDefault(ConfigK8sEnv, *k8sEnvB)
 
 	viper.SetDefault(ConfigLogPath, *logStr)
+
+	viper.SetDefault(ConfigStateAgent, *stateAgent)
 
 	viper.SetDefault(ConfigRelayServerURL, *relayServerURLStr)
 
@@ -98,6 +107,7 @@ func LoadConfig() error {
 		DefaultNetworkPosture: viper.GetString(ConfigDefaultNetworkPosture),
 		K8sEnv:                viper.GetBool(ConfigK8sEnv),
 		LogPath:               viper.GetString(ConfigLogPath),
+		StateAgent:            viper.GetBool(ConfigStateAgent),
 		RelayServerURL:        relayURL.String(),
 	}
 

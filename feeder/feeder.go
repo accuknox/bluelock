@@ -1,60 +1,134 @@
 package feeder
 
 import (
-	"context"
-	"math/rand"
+	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 
-	"github.com/daemon1024/bluelock/common"
 	cfg "github.com/daemon1024/bluelock/config"
 	"github.com/google/uuid"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	pb "github.com/kubearmor/KubeArmor/protobuf"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
-	"google.golang.org/grpc/status"
 )
+
+// EventStruct Structure
+type EventStruct[T any] struct {
+	Filter    string
+	Broadcast chan *T
+}
+
+type EventStructs struct {
+	MsgStructs map[string]EventStruct[pb.Message]
+	MsgLock    sync.RWMutex
+
+	AlertStructs map[string]EventStruct[pb.Alert]
+	AlertLock    sync.RWMutex
+
+	LogStructs map[string]EventStruct[pb.Log]
+	LogLock    sync.RWMutex
+}
+
+// AddMsgStruct Function
+func (es *EventStructs) AddMsgStruct(filter string, queueSize int) (string, chan *pb.Message) {
+	es.MsgLock.Lock()
+	defer es.MsgLock.Unlock()
+
+	uid := uuid.Must(uuid.NewRandom()).String()
+	conn := make(chan *pb.Message, queueSize)
+
+	msgStruct := EventStruct[pb.Message]{
+		Filter:    filter,
+		Broadcast: conn,
+	}
+
+	es.MsgStructs[uid] = msgStruct
+
+	return uid, conn
+}
+
+// RemoveMsgStruct Function
+func (es *EventStructs) RemoveMsgStruct(uid string) {
+	es.MsgLock.Lock()
+	defer es.MsgLock.Unlock()
+
+	delete(es.MsgStructs, uid)
+}
+
+// AddAlertStruct Function
+func (es *EventStructs) AddAlertStruct(filter string, queueSize int) (string, chan *pb.Alert) {
+	es.AlertLock.Lock()
+	defer es.AlertLock.Unlock()
+
+	uid := uuid.Must(uuid.NewRandom()).String()
+	conn := make(chan *pb.Alert, queueSize)
+
+	alertStruct := EventStruct[pb.Alert]{
+		Filter:    filter,
+		Broadcast: conn,
+	}
+
+	es.AlertStructs[uid] = alertStruct
+
+	return uid, conn
+}
+
+// removeAlertStruct Function
+func (es *EventStructs) RemoveAlertStruct(uid string) {
+	es.AlertLock.Lock()
+	defer es.AlertLock.Unlock()
+
+	delete(es.AlertStructs, uid)
+}
+
+// addLogStruct Function
+func (es *EventStructs) AddLogStruct(filter string, queueSize int) (string, chan *pb.Log) {
+	es.LogLock.Lock()
+	defer es.LogLock.Unlock()
+
+	uid := uuid.Must(uuid.NewRandom()).String()
+	conn := make(chan *pb.Log, queueSize)
+
+	logStruct := EventStruct[pb.Log]{
+		Filter:    filter,
+		Broadcast: conn,
+	}
+
+	es.LogStructs[uid] = logStruct
+
+	return uid, conn
+}
+
+// removeLogStruct Function
+func (es *EventStructs) RemoveLogStruct(uid string) {
+	es.LogLock.Lock()
+	defer es.LogLock.Unlock()
+
+	delete(es.LogStructs, uid)
+}
 
 var (
 	PtraceEnforcer = "Ptrace enforcer"
 	PtraceTracer   = "Ptrace tracer"
-	//LogModeHTTP = "http"
-	//LogModeGRPC = "grpc"
-
-	// LogStructs Map
-	LogStructs map[string]LogStruct
-	// LogLock Lock
-	LogLock *sync.RWMutex
-
-	// AlertStructs Map
-	AlertStructs map[string]AlertStruct
-	// AlertLock Lock
-	AlertLock *sync.RWMutex
-
-	// MessageStructs Map
-	MessageStructs map[string]MessageStruct
-	// MessageLock Lock
-	MessageLock *sync.RWMutex
 )
 
-// LogStruct Structure
-type LogStruct struct {
-	Broadcast chan *pb.Log
-}
+type FeederInterface interface {
+	// Methods
 
-// AlertStruct Structure
-type AlertStruct struct {
-	Broadcast chan *pb.Alert
-}
+	// How does the feeder pushes logs and messages
+	PushLog(tp.Log)
+	PushMessage(string, string)
 
-// MessageStruct Structure
-type MessageStruct struct {
-	Broadcast chan *pb.Message
+	// How does this feeder match log with policy
+	UpdateMatchedPolicy(tp.Log)
+
+	// How this feeder serves log feeds
+	ServeLogFeeds()
 }
 
 type Feeder struct {
@@ -64,30 +138,26 @@ type Feeder struct {
 	SecurityPolicy     tp.MatchPolicies
 	SecurityPolicyLock *sync.RWMutex
 
-	DefaultPosture tp.DefaultPosture
-
-	EnableSidekick       bool
-	EnableKubearmorRelay bool
-
-	RelayServerURL string
-
-	LogClient *LogStreamerClient
+	DefaultPosture     tp.DefaultPosture
+	DefaultPostureLock *sync.RWMutex
 
 	HostName string
+
+	EventStructs *EventStructs
 
 	// wait group
 	WgServer sync.WaitGroup
 
 	Running bool
-}
 
-type LogStreamerClient struct {
-	Conn   *grpc.ClientConn
-	Client pb.PushLogServiceClient
+	// port
+	Port string
 
-	PushLogClient     pb.PushLogService_PushLogsClient
-	PushAlertClient   pb.PushLogService_PushAlertsClient
-	PushMessageClient pb.PushLogService_PushMessagesClient
+	// gRPC listener
+	Listener net.Listener
+
+	// log server
+	LogServer *grpc.Server
 }
 
 func NewFeeder() *Feeder {
@@ -108,14 +178,10 @@ func NewFeeder() *Feeder {
 	}
 
 	fd.SecurityPolicy = tp.MatchPolicies{}
-	fd.DefaultPosture = tp.DefaultPosture{}
+	fd.SecurityPolicyLock = new(sync.RWMutex)
 
-	address, err := common.GetURL(cfg.GlobalCfg.RelayServerURL)
-	if err != nil {
-		kg.Errf("Failed to parse Relay Server URL: %s", err.Error())
-		return nil
-	}
-	fd.RelayServerURL = address
+	fd.DefaultPosture = tp.DefaultPosture{}
+	fd.DefaultPostureLock = new(sync.RWMutex)
 
 	hostname, err := os.Hostname()
 	if err != nil {
@@ -126,22 +192,55 @@ func NewFeeder() *Feeder {
 	// set wait group
 	fd.WgServer = sync.WaitGroup{}
 
+	// initialize msg structs
+	fd.EventStructs = &EventStructs{
+		MsgStructs: make(map[string]EventStruct[pb.Message]),
+		MsgLock:    sync.RWMutex{},
+
+		// initialize alert structs
+		AlertStructs: make(map[string]EventStruct[pb.Alert]),
+		AlertLock:    sync.RWMutex{},
+
+		// initialize log structs
+		LogStructs: make(map[string]EventStruct[pb.Log]),
+		LogLock:    sync.RWMutex{},
+	}
+
 	fd.Running = true
 
-	// initialize log structs
-	LogStructs = make(map[string]LogStruct)
-	LogLock = &sync.RWMutex{}
+	// gRPC configuration
+	fd.Port = fmt.Sprintf(":%s", "32767")
 
-	// initialize alert structs
-	AlertStructs = make(map[string]AlertStruct)
-	AlertLock = &sync.RWMutex{}
+	// listen to gRPC port
+	listener, err := net.Listen("tcp", fd.Port)
+	if err != nil {
+		kg.Errf("Failed to listen a port (%s, %s)", fd.Port, err.Error())
+		return nil
+	}
+	fd.Listener = listener
 
-	// initialize message structs
-	MessageStructs = make(map[string]MessageStruct)
-	MessageLock = &sync.RWMutex{}
+	port := fmt.Sprintf("%d", listener.Addr().(*net.TCPAddr).Port)
+	fd.Port = fmt.Sprintf(":%s", port)
 
-	// gRPC by default
-	//fd.LogMode = LogModeGRPC
+	// create a log server
+
+	logService := &LogService{
+		QueueSize:    1000,
+		Running:      &fd.Running,
+		EventStructs: fd.EventStructs,
+	}
+
+	kaep := keepalive.EnforcementPolicy{
+		PermitWithoutStream: true,
+	}
+	kasp := keepalive.ServerParameters{
+		Time:    1 * time.Second,
+		Timeout: 5 * time.Second,
+	}
+
+	fd.LogServer = grpc.NewServer(grpc.KeepaliveEnforcementPolicy(kaep), grpc.KeepaliveParams(kasp))
+
+	pb.RegisterLogServiceServer(fd.LogServer, logService)
 
 	return fd
 }
@@ -149,341 +248,30 @@ func NewFeeder() *Feeder {
 func (fd *Feeder) DestroyFeeder() error {
 	fd.Running = false
 
-	if fd.LogClient != nil {
-		if fd.LogClient.Conn != nil {
-			err := fd.LogClient.Conn.Close()
-			if err != nil {
-				return err
-			}
+	// wait for a while
+	time.Sleep(time.Second * 1)
+
+	// close listener
+	if fd.Listener != nil {
+		if err := fd.Listener.Close(); err != nil {
+			kg.Err(err.Error())
 		}
+		fd.Listener = nil
 	}
-	fd.LogClient = nil
+
+	// wait for other routines
+	fd.WgServer.Wait()
 
 	return nil
 }
 
 // StreamLogFeeds Function
-func (fd *Feeder) StreamLogFeeds() {
-	for fd.Running {
-		fd.connectWithRelay()
-		if fd.LogClient == nil {
-			kg.Errf("Failed to connect with relay for streaming logs")
-			return
-		}
-
-		kg.Printf("Connected with relay server for pushing logs", fd.RelayServerURL)
-
-		// destroy
-
-		fd.WgServer.Add(1)
-		go fd.PushLogs()
-		kg.Printf("Started to PushLogs")
-
-		fd.WgServer.Add(1)
-		go fd.PushAlerts()
-		kg.Printf("Started to PushAlerts")
-
-		fd.WgServer.Add(1)
-		go fd.PushMessages()
-		kg.Printf("Started to PushMessages")
-
-		time.Sleep(time.Second * 1)
-
-		// wait for other routines to terminate before creating a new connection
-		fd.WgServer.Wait()
-
-		// destroy client
-		if err := fd.LogClient.Conn.Close(); err != nil {
-			kg.Warnf("Failed to delete LogClient: %s", err.Error())
-		}
-		kg.Printf("Closed log client for %s", fd.RelayServerURL)
-
-		fd.LogClient = nil
-	}
-
-	return
-}
-
-func (fd *Feeder) PushLogs() {
+func (fd *Feeder) ServeLogFeeds() {
+	fd.WgServer.Add(1)
 	defer fd.WgServer.Done()
 
-	uid := uuid.Must(uuid.NewRandom()).String()
-	conn := make(chan *pb.Log, 1)
-	closeChan := make(chan *pb.ReplyMessage, 1)
-	defer close(conn)
-
-	// add a new log struct
-	logStruct := LogStruct{}
-	logStruct.Broadcast = conn
-
-	LogLock.Lock()
-	LogStructs[uid] = logStruct
-	LogLock.Unlock()
-
-	kg.Printf("Added a new connection (%s) for PushLogs", uid)
-	defer removeLogStruct(uid)
-
-	lc := fd.LogClient
-
-	go func() {
-		resp, err := lc.PushLogClient.Recv()
-		if status, ok := status.FromError(err); ok {
-			switch status.Code() {
-			case codes.OK:
-				closeChan <- resp
-			default:
-				kg.Warnf("Error while receiving ReplyMessage from relay", err)
-				return
-			}
-		}
-	}()
-
-	for fd.Running {
-		select {
-		case <-lc.PushLogClient.Context().Done():
-			return
-		case <-closeChan:
-			kg.Printf("Relay closed connection for Logs")
-			return
-		case resp := <-conn:
-			if status, ok := status.FromError(lc.PushLogClient.Send(resp)); ok {
-				switch status.Code() {
-				case codes.OK:
-					// noop
-				default:
-					kg.Warnf("failed to push a log=[%+v] err=[%s]", resp, status.Err().Error())
-					return
-				}
-			}
-		}
+	// feed logs
+	if err := fd.LogServer.Serve(fd.Listener); err != nil {
+		kg.Print("Terminated the gRPC service")
 	}
-
-	kg.Printf("Stopped pushing logs to client (%s)", uid)
-
-	return
-}
-
-func (fd *Feeder) PushAlerts() {
-	defer fd.WgServer.Done()
-
-	uid := uuid.Must(uuid.NewRandom()).String()
-	conn := make(chan *pb.Alert, 1)
-	closeChan := make(chan *pb.ReplyMessage, 1)
-	defer close(conn)
-
-	// add a new alert struct
-	alertStruct := AlertStruct{}
-	alertStruct.Broadcast = conn
-
-	AlertLock.Lock()
-	AlertStructs[uid] = alertStruct
-	AlertLock.Unlock()
-
-	kg.Printf("Added a new connection (%s) for PushAlerts", uid)
-	defer removeAlertStruct(uid)
-
-	lc := fd.LogClient
-
-	go func() {
-		resp, err := lc.PushAlertClient.Recv()
-		if status, ok := status.FromError(err); ok {
-			switch status.Code() {
-			case codes.OK:
-				closeChan <- resp
-			default:
-				kg.Warnf("Error while receiving ReplyMessage from relay", err)
-				return
-			}
-		}
-	}()
-
-	for fd.Running {
-		select {
-		case <-lc.PushAlertClient.Context().Done():
-			return
-		case <-closeChan:
-			kg.Printf("Relay closed connection for Alerts")
-			return
-		case resp := <-conn:
-			if status, ok := status.FromError(lc.PushAlertClient.Send(resp)); ok {
-				switch status.Code() {
-				case codes.OK:
-					// noop
-				default:
-					kg.Warnf("feeder failed to push an alert=[%+v] err=[%s]", resp, status.Err().Error())
-					return
-				}
-			}
-		}
-	}
-
-	kg.Printf("Stopped pushing alerts to client (%s)", uid)
-
-	return
-}
-
-func (fd *Feeder) PushMessages() {
-	defer fd.WgServer.Done()
-
-	uid := uuid.Must(uuid.NewRandom()).String()
-	conn := make(chan *pb.Message, 1)
-	closeChan := make(chan *pb.ReplyMessage, 1)
-	defer close(conn)
-
-	// add a new message struct
-	messageStruct := MessageStruct{}
-	messageStruct.Broadcast = conn
-
-	MessageLock.Lock()
-	MessageStructs[uid] = messageStruct
-	MessageLock.Unlock()
-
-	kg.Printf("Added a new connection (%s) for PushMessages", uid)
-	defer removeMessageStruct(uid)
-
-	lc := fd.LogClient
-
-	go func() {
-		resp, err := lc.PushMessageClient.Recv()
-		if status, ok := status.FromError(err); ok {
-			switch status.Code() {
-			case codes.OK:
-				closeChan <- resp
-			default:
-				kg.Warnf("Error while receiving ReplyMessage from relay", err)
-				return
-			}
-		}
-	}()
-
-	for fd.Running {
-		select {
-		case <-lc.PushMessageClient.Context().Done():
-			return
-		case <-closeChan:
-			kg.Printf("Relay closed connection for Messages")
-			return
-		case resp := <-conn:
-			if status, ok := status.FromError(lc.PushMessageClient.Send(resp)); ok {
-				switch status.Code() {
-				case codes.OK:
-					// noop
-				default: // otherwise, close the connection
-					kg.Warnf("feeder failed to send a message=[%+v] err=[%s]", resp, status.Err().Error())
-					return
-				}
-			}
-		}
-	}
-
-	kg.Printf("Stopped pushing messages to client (%s)", uid)
-
-	return
-}
-
-// connectWithRelay attemtps to establish a connection with kubearmor-relay
-// until the relay is healthy
-func (fd *Feeder) connectWithRelay() {
-	var err error
-	lc := &LogStreamerClient{}
-
-	kacp := keepalive.ClientParameters{
-		Time:                1 * time.Second,
-		Timeout:             5 * time.Second,
-		PermitWithoutStream: true,
-	}
-
-	address := fd.RelayServerURL
-	for fd.Running {
-		conn, err := grpc.Dial(address, grpc.WithInsecure(), grpc.WithKeepaliveParams(kacp), grpc.WithBlock())
-		if err != nil {
-			time.Sleep(time.Second * 5)
-			conn.Close()
-			continue
-		}
-
-		lc.Conn = conn
-
-		client := pb.NewPushLogServiceClient(conn)
-
-		lc.Client = client
-
-		if ok := lc.doHealthCheck(); !ok {
-			kg.Warnf("PushLogClient is unhealthy")
-			time.Sleep(time.Second * 5)
-			conn.Close()
-			continue
-		}
-
-		break
-	}
-
-	lc.PushLogClient, err = lc.Client.PushLogs(context.Background())
-	if err != nil {
-		kg.Warnf("Failed to create PushLogs (%s) err=%s", address, err.Error())
-	}
-
-	lc.PushAlertClient, err = lc.Client.PushAlerts(context.Background())
-	if err != nil {
-		kg.Warnf("Failed to create PushAlerts (%s) err=%s", address, err.Error())
-	}
-
-	lc.PushMessageClient, err = lc.Client.PushMessages(context.Background())
-	if err != nil {
-		kg.Warnf("Failed to create PushMessages (%s) err=%s", address, err.Error())
-	}
-
-	fd.LogClient = lc
-	return
-}
-
-// doHealthCheck Function
-func (lc *LogStreamerClient) doHealthCheck() bool {
-	// #nosec
-	randNum := rand.Int31()
-
-	// send a nonce
-	nonce := pb.NonceMessage{Nonce: randNum}
-	res, err := lc.Client.HealthCheck(context.Background(), &nonce)
-	if err != nil {
-		kg.Warnf("Relay server health check failed. %s", err)
-		return false
-	}
-
-	// check nonce
-	if randNum != res.Retval {
-		return false
-	}
-
-	return true
-}
-
-// removeLogStruct Function
-func removeLogStruct(uid string) {
-	LogLock.Lock()
-	defer LogLock.Unlock()
-
-	delete(LogStructs, uid)
-
-	kg.Printf("Deleted connection (%s) for PushLogs", uid)
-}
-
-// removeAlertStruct Function
-func removeAlertStruct(uid string) {
-	AlertLock.Lock()
-	defer AlertLock.Unlock()
-
-	delete(AlertStructs, uid)
-
-	kg.Printf("Deleted connection (%s) for PushAlerts", uid)
-}
-
-// removeMessageStruct Function
-func removeMessageStruct(uid string) {
-	MessageLock.Lock()
-	defer MessageLock.Unlock()
-
-	delete(MessageStructs, uid)
-
-	kg.Printf("Deleted connection (%s) for PushMessages", uid)
 }
