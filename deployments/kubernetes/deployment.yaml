@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  # EDIT
+  name: <deployment-name>
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      # EDIT
+      kubearmor.io/container.name: <selector-label>
+  template:
+    metadata:
+      labels:
+        # EDIT
+        kubearmor.io/container.name: <selector-label>
+    spec:
+      # init contianer injects bluelock binary into a shared volume
+      initContainers:
+        - name: bluelock
+          image: daemon1024/bluelock
+          imagePullPolicy: Always
+          volumeMounts:
+            - mountPath: /kubearmor
+              name: kubearmor-dir
+
+      # shared volume
+      volumes:
+        - emptyDir: {}
+          name: kubearmor-dir
+
+      # service account used by kubearmor, don't change this
+      serviceAccountName: kubearmor
+
+      containers:
+          # EDIT - specify a container name
+        - name: <container-name>
+          # EDIT - specify a container image
+          image: <your-image-name>
+          # EDIT - specify image pull policy
+          imagePullPolicy: Always
+
+          # this executes bluelock, don't change this
+          command:
+            - /kubearmor/bluelock
+
+          # EDIT - replace with your default command
+          args:
+            - ""
+
+          # shared volume mount
+          volumeMounts:
+            - mountPath: /kubearmor
+              name: kubearmor-dir
+          env:
+          # needed for connecting with relay-server
+          - name: "RELAYSERVERURL"
+            value: "http://kubearmor.kube-system.svc.cluster.local:32767"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubearmor-clusterrolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: kubearmor
+  namespace: default
+- kind: ServiceAccount
+  name: kubearmor
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubearmor
+  namespace: default
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubearmor
+  namespace: kube-system

@@ -1,0 +1,30 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: vault-agent-injector-hashicorp-vault-k8s-1-2-1-trusted-cert-mod
+spec:
+  action: Block
+  file:
+    matchDirectories:
+    - dir: /etc/ssl/
+      recursive: true
+    - dir: /etc/pki/
+      recursive: true
+    - dir: /usr/local/share/ca-certificates/
+      recursive: true
+  message: Credentials modification denied
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: armored-container
+  severity: 1
+  tags:
+  - MITRE
+  - MITRE_T1552_unsecured_credentials
+
+  # echo "new-cert" > /etc/ssl/certs/my-key.pem
+  # cat /etc/ssl/certs/my-key.pem
+  # rm -rf /etc/ssl/certs/my-key.pem
+
+  # ls /etc/ssl/certs
+  # echo "new-file" > /etc/ssl/certs/my-key.pem
+  # cat /etc/ssl/certs/my-key.pem

@@ -1,0 +1,172 @@
+{
+	"services": [
+		{
+			"serviceArn": "<REDACTED>",
+			"serviceName": "armored-container-service",
+			"clusterArn": "<REDACTED>",
+			"loadBalancers": [],
+			"serviceRegistries": [],
+			"status": "ACTIVE",
+			"desiredCount": 1,
+			"runningCount": 1,
+			"pendingCount": 0,
+			"launchType": "FARGATE",
+			"platformVersion": "LATEST",
+			"platformFamily": "Linux",
+			"taskDefinition": "<REDACTED>",
+			"deploymentConfiguration": {
+				"deploymentCircuitBreaker": {
+					"enable": true,
+					"rollback": true
+				},
+				"maximumPercent": 200,
+				"minimumHealthyPercent": 100
+			},
+			"deployments": [
+				{
+					"id": "ecs-svc/5095800472445100540",
+					"status": "PRIMARY",
+					"taskDefinition": "<REDACTED>",
+					"desiredCount": 1,
+					"pendingCount": 0,
+					"runningCount": 1,
+					"failedTasks": 0,
+					"createdAt": "2023-07-21T08:51:00.958000+05:30",
+					"updatedAt": "2023-07-21T08:55:31.914000+05:30",
+					"launchType": "FARGATE",
+					"platformVersion": "1.4.0",
+					"platformFamily": "Linux",
+					"networkConfiguration": {
+						"awsvpcConfiguration": {
+							"subnets": [
+								"<REDACTED>"
+							],
+							"securityGroups": [
+								"<REDACTED>"
+							],
+							"assignPublicIp": "ENABLED"
+						}
+					},
+					"rolloutState": "COMPLETED",
+					"rolloutStateReason": "ECS deployment ecs-svc/5095800472445100540 completed."
+				}
+			],
+			"roleArn": "<REDACTED>",
+			"events": [
+				{
+					"id": "4830fc3a-888e-42e0-9aaa-b5bbe577516a",
+					"createdAt": "2023-07-21T14:55:57.171000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "9adf848e-5746-48a6-9ddf-bf6e91aabdfe",
+					"createdAt": "2023-07-21T08:55:31.919000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "7876ab74-6a06-4eec-9204-83a578e06c82",
+					"createdAt": "2023-07-21T08:55:31.918000+05:30",
+					"message": "(service armored-container-service) (deployment ecs-svc/5095800472445100540) deployment completed."
+				},
+				{
+					"id": "c4287cf2-6715-4dc3-a765-755ad0d9d4b3",
+					"createdAt": "2023-07-21T08:52:53.739000+05:30",
+					"message": "(service armored-container-service) has stopped 1 running tasks: (task 18227ab7d612451eac7fa799285fac34)."
+				},
+				{
+					"id": "e079943b-56a2-41ca-a137-5c95d0c6ffbe",
+					"createdAt": "2023-07-21T08:51:28.038000+05:30",
+					"message": "(service armored-container-service) has started 1 tasks: (task 8b696488625c43b29917bc0011d514a0)."
+				},
+				{
+					"id": "9c9f0895-6e14-40db-873e-e88f4e3076c8",
+					"createdAt": "2023-07-21T05:35:16.087000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "1606f4cc-7ef1-4207-94e0-51909503d096",
+					"createdAt": "2023-07-20T23:34:59.019000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "c7f1d66f-a53c-4fdb-98bf-d0b4fd043a57",
+					"createdAt": "2023-07-20T17:34:50.060000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "00e875cf-d912-419b-9622-c5469c907e3c",
+					"createdAt": "2023-07-20T17:34:50.059000+05:30",
+					"message": "(service armored-container-service) (deployment ecs-svc/1917268798230133817) deployment completed."
+				},
+				{
+					"id": "f6426454-b74f-4611-9141-2118a3c72473",
+					"createdAt": "2023-07-20T17:32:45.974000+05:30",
+					"message": "(service armored-container-service) has stopped 1 running tasks: (task 445da4a243334c2da49816bc8e4512c6)."
+				},
+				{
+					"id": "84711db2-558e-4a86-bbf4-8a4cd22ecdd7",
+					"createdAt": "2023-07-20T17:31:27.654000+05:30",
+					"message": "(service armored-container-service) has started 1 tasks: (task 18227ab7d612451eac7fa799285fac34)."
+				},
+				{
+					"id": "1c4d7266-e709-4ba9-9847-ba29806235e5",
+					"createdAt": "2023-07-20T16:45:35.519000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "13e0d28e-7ca4-4f60-9fd4-102fe9ce43ec",
+					"createdAt": "2023-07-20T16:45:35.518000+05:30",
+					"message": "(service armored-container-service) (deployment ecs-svc/0095785089613403979) deployment completed."
+				},
+				{
+					"id": "5c8c861e-4a2e-4a51-ab07-f03d6248292c",
+					"createdAt": "2023-07-20T16:43:22.581000+05:30",
+					"message": "(service armored-container-service) has stopped 1 running tasks: (task 9afc04248a984b8282619bef1c23ec19)."
+				},
+				{
+					"id": "4df652dc-6a1f-418f-9e90-4bb2d4d1f647",
+					"createdAt": "2023-07-20T16:42:13.912000+05:30",
+					"message": "(service armored-container-service) has started 1 tasks: (task 445da4a243334c2da49816bc8e4512c6)."
+				},
+				{
+					"id": "25eff47b-5fcc-4a5d-b75b-b29fea6c6df0",
+					"createdAt": "2023-07-20T16:29:48.915000+05:30",
+					"message": "(service armored-container-service) has reached a steady state."
+				},
+				{
+					"id": "b67b857b-2989-4d49-9eb9-1dd361207cec",
+					"createdAt": "2023-07-20T16:29:48.914000+05:30",
+					"message": "(service armored-container-service) (deployment ecs-svc/5137600825021193598) deployment completed."
+				},
+				{
+					"id": "f951a069-73d5-417c-94a8-dc4f9bfb089a",
+					"createdAt": "2023-07-20T16:27:26.557000+05:30",
+					"message": "(service armored-container-service) has started 1 tasks: (task 9afc04248a984b8282619bef1c23ec19)."
+				}
+			],
+			"createdAt": "2023-07-20T16:27:23.049000+05:30",
+			"placementConstraints": [],
+			"placementStrategy": [],
+			"networkConfiguration": {
+				"awsvpcConfiguration": {
+					"subnets": [
+						"<REDACTED>"
+					],
+					"securityGroups": [
+						"<REDACTED>"
+					],
+					"assignPublicIp": "ENABLED"
+				}
+			},
+			"schedulingStrategy": "REPLICA",
+			"deploymentController": {
+				"type": "ECS"
+			},
+			"createdBy": "<REDACTED>",
+			"enableECSManagedTags": true,
+			"propagateTags": "NONE",
+			"enableExecuteCommand": false
+		}
+	],
+	"failures": []
+}

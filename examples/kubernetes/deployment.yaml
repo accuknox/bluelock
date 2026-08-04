@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: armored-application
+  labels:
+    deployment: armored-application
+  namespace: bluelock
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: armored-container
+  template:
+    metadata:
+      labels:
+        kubearmor.io/container.name: armored-container
+    spec:
+      serviceAccountName: bluelock
+      volumes:
+        - emptyDir: {}
+          name: bluelock-dir
+      initContainers:
+        - name: bluelock
+          image: delusionaloptimist/bluelock
+            #image: accuknox/bluelock
+          imagePullPolicy: Always
+          volumeMounts:
+            - mountPath: /kubearmor
+              name: bluelock-dir
+      containers:
+        - name: armored-container
+          image: delusionaloptimist/ka-socat
+            #image: accuknox/ka-socat-demo
+          imagePullPolicy: Always
+          command:
+            - "/kubearmor/bluelock"
+          args:
+            - "socat"
+            - "TCP-LISTEN:1337,reuseaddr,fork"
+            - "EXEC:bash,pty,stderr,setsid,sigint,sane"
+          ports:
+            - containerPort: 1337
+          volumeMounts:
+            - mountPath: /kubearmor
+              name: bluelock-dir
+          env:
+          - name: "RELAYSERVERURL"
+            value: "http://bluelock.bluelock.svc.cluster.local:32767"
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bluelock-clusterrolebinding
+  namespace: bluelock
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+- kind: ServiceAccount
+  name: bluelock
+  namespace: default
+- kind: ServiceAccount
+  name: bluelock
+  namespace: bluelock
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: bluelock
+  namespace: bluelock

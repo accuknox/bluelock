@@ -1,7 +1,6 @@
 package feeder
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -375,15 +374,23 @@ func getDirectoryPart(path string) string {
 }
 
 // Update Log Fields based on default posture and visibility configuration and return false if no updates
-func setLogFields(log *tp.Log, existAllowPolicy bool, defaultPosture string, visibility bool) {
+func setLogFields(log *tp.Log, existAllowPolicy bool, defaultPosture string, visibility bool, containerEvent bool) {
 	if existAllowPolicy && defaultPosture == "audit" && (*log).Result == "Passed" {
-		(*log).Type = "MatchedPolicy"
+		if containerEvent {
+			(*log).Type = "MatchedPolicy"
+		} else {
+			(*log).Type = "MatchedHostPolicy"
+		}
 
 		(*log).PolicyName = "DefaultPosture"
 		(*log).Enforcer = PtraceTracer
 		(*log).Action = "Audit"
-	} else {
+	}
+
+	if containerEvent {
 		(*log).Type = "ContainerLog"
+	} else {
+		(*log).Type = "HostLog"
 	}
 }
 
@@ -420,7 +427,6 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			switch log.Operation {
 			case "Process", "File":
 				if secPolicy.Operation != log.Operation {
-					fmt.Println("LINE 620")
 					continue
 				}
 
@@ -447,19 +453,9 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 
 						matchedFlags := false
 
-						if secPolicy.ReadOnly && log.Resource != "" && secPolicy.OwnerOnly && log.MergedDir != "" {
-							// read only && owner only
-							if strings.Contains(log.Data, "O_RDONLY") && strconv.Itoa(int(log.UID)) == getFileProcessUID(log.MergedDir+log.Resource) {
-								matchedFlags = true
-							}
-						} else if secPolicy.ReadOnly && log.Resource != "" {
+						if secPolicy.ReadOnly && log.Resource != "" {
 							// read only
 							if strings.Contains(log.Data, "O_RDONLY") {
-								matchedFlags = true
-							}
-						} else if secPolicy.OwnerOnly && log.MergedDir != "" {
-							// owner only
-							if strconv.Itoa(int(log.UID)) == getFileProcessUID(log.MergedDir+log.Resource) {
 								matchedFlags = true
 							}
 						} else {
@@ -841,13 +837,13 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			}
 
 			if log.Operation == "Process" {
-				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true)
+				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true, true)
 				return log
 			} else if log.Operation == "File" {
-				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true)
+				setLogFields(&log, existFileAllowPolicy, fd.DefaultPosture.FileAction, true, true)
 				return log
 			} else if log.Operation == "Network" {
-				setLogFields(&log, existNetworkAllowPolicy, fd.DefaultPosture.NetworkAction, true)
+				setLogFields(&log, existNetworkAllowPolicy, fd.DefaultPosture.NetworkAction, true, true)
 				return log
 			}
 
@@ -855,9 +851,22 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 			if log.Action == "Allow" && log.Result == "Passed" {
 				return tp.Log{}
 			}
-			fmt.Println("MatchedPolicy")
 
 			return log
+		}
+	} else { // host process
+		if log.Type == "" {
+			// host log
+			if log.Operation == "Process" {
+				setLogFields(&log, existFileAllowPolicy, "allow", true, false)
+				return log
+			} else if log.Operation == "File" {
+				setLogFields(&log, existFileAllowPolicy, "allow", true, false)
+				return log
+			} else if log.Operation == "Network" {
+				setLogFields(&log, existNetworkAllowPolicy, "allow", true, false)
+				return log
+			}
 		}
 	}
 

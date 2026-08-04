@@ -20,9 +20,9 @@ var (
 )
 
 const (
-	cgroupFsPath = "/sys/fs/cgroup"
-	cgroupV1Path = "/proc/self/cgroup"
-	cgroupV2Path = "/proc/self/mountinfo"
+	cgroupFsPath   = "/sys/fs/cgroup"
+	cgroupV1Path   = "/proc/self/cgroup"
+	cgroupV2Path   = "/proc/self/mountinfo"
 	cgroupV1Output = "tmpfs"
 	cgroupV2Output = "cgroup2fs"
 )

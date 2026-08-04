@@ -1,0 +1,58 @@
+version: '3.8'
+volumes:
+  kubearmor-dir: {}
+services:
+  # copy kubearmor binary to a shared vol
+  # REQUIRED
+  bluelock:
+    container_name: bluelock
+    build:
+      context: .
+    image: delusionaloptimist/bluelock:latest
+    #image: accuknox/bluelock:latest
+    volumes:
+      - kubearmor-dir:/kubearmor
+
+  # relay server
+  kubearmor-relay-server:
+    # REQUIRED FIELDS
+    image: delusionaloptimist/kubearmor-relay-server:latest
+    #image: kubearmor/kubearmor-relay-server:latest
+    command: ["-k8s=false"]
+
+    # OPTIONAL FIELDS
+    container_name: kubearmor-relay-server
+    # depending on your network mode
+    networks:
+      - bluelock-test-net
+    ports:
+      # gRPC port for relay
+      # clients and kubearmor both connect to this
+      - "32767:32767"
+
+
+  # application container
+  # update service name
+  <service-name>:
+    # REQUIRED FIELDS
+    depends_on:
+      - bluelock
+    image: <your-image>
+    volumes:
+      - kubearmor-dir:/kubearmor
+    entrypoint:
+      - "/kubearmor/bluelock"
+    # edit this and set your command
+    command:
+      - ""
+    environment:
+      # in docker private network mode, container name can be used to access a container
+      - RELAYSERVERURL=http://kubearmor-relay-server:32767
+      - K8S=false
+      # this is the container name that would be used to match policies
+      # doesn't have to be
+      - CONTAINERNAME=<container-name>
+
+    # OPTIONAL FIELDS
+    networks:
+      - bluelock-test-net
