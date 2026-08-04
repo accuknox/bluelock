@@ -21,11 +21,21 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Verify workspace
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Build bluelock binary
+        run: |
+          make build
+
+      - name: Verify binary
         run: |
           pwd
           ls -lah
-          find . -name bluelock
+          file bluelock
+          ls -lh bluelock
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
