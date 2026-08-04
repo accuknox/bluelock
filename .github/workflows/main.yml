@@ -30,13 +30,6 @@ jobs:
         run: |
           make build
 
-      - name: Verify binary
-        run: |
-          pwd
-          ls -lah
-          file bluelock
-          ls -lh bluelock
-
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -51,10 +44,8 @@ jobs:
         run: |
           docker build \
             -t $ECR_REGISTRY/$IMAGE_NAME:${{ github.ref_name }} \
-            -t $ECR_REGISTRY/$IMAGE_NAME:latest \
             .
 
       - name: Push Docker image
         run: |
           docker push $ECR_REGISTRY/$IMAGE_NAME:${{ github.ref_name }}
-          docker push $ECR_REGISTRY/$IMAGE_NAME:latest
