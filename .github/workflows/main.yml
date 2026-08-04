@@ -38,6 +38,11 @@ jobs:
       uses: accuknox/common-gh-actions/actions/checkout-source@main
     - name: Set git ssh private key
       run: echo "${{ secrets.GIT_KEY }}" > GIT-KEY
+    - name: Debug workspace
+      run: |
+        pwd
+        ls -lah
+        find . -name bluelock
     - name: Docker build
       uses: accuknox/common-gh-actions/actions/docker-scan@main
       with:
