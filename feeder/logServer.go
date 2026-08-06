@@ -1,10 +1,13 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package feeder
 
 import (
 	"context"
 	"fmt"
 
-	kl "github.com/daemon1024/bluelock/common"
+	kl "github.com/accuknox/bluelock/common"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	pb "github.com/kubearmor/KubeArmor/protobuf"
 )

@@ -1,2 +1,3 @@
-# bluelock
-monitoring + enforcement in a sidecar injection
+# Bluelock
+
+Monitoring + Enforcement in a sidecar injection.

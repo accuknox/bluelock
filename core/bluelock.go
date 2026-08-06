@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package core
 
 import (
@@ -6,10 +9,10 @@ import (
 	"path/filepath"
 	"sync"
 
-	cfg "github.com/daemon1024/bluelock/config"
-	"github.com/daemon1024/bluelock/enforcer"
-	"github.com/daemon1024/bluelock/feeder"
-	"github.com/daemon1024/bluelock/state"
+	cfg "github.com/accuknox/bluelock/config"
+	"github.com/accuknox/bluelock/enforcer"
+	"github.com/accuknox/bluelock/feeder"
+	"github.com/accuknox/bluelock/state"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"

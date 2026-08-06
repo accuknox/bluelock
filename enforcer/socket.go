@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 // Remove this file after exporting these from KubeArmor - https://github.com/KubeArmor/KubeArmor/blob/ae6c601426a2ee35300b92c4325d99ba6b3d42f0/KubeArmor/monitor/syscallParser.go
 
 package enforcer

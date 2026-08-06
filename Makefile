@@ -1,5 +1,5 @@
-# SPDX-License-Identifier: Apache-2.0
-# Copyright 2023 Authors of KubeArmor
+# SPDX-License-Identifier: MIT
+# Copyright 2026 Authors of Bluelock
 
 GOOS := $(shell go env GOOS)
 GOARCH := $(shell go env GOARCH)
