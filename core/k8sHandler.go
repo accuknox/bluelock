@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package core
 
 import (
@@ -11,7 +14,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/daemon1024/bluelock/common"
+	"github.com/accuknox/bluelock/common"
 	"github.com/kubearmor/KubeArmor/KubeArmor/log"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	kspclient "github.com/kubearmor/KubeArmor/pkg/KubeArmorController/client/clientset/versioned"

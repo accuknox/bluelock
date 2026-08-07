@@ -1,4 +1,6 @@
-// package state implements the state agent service which reports details about the node and containers being protected by KubeArmor
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package state
 
 import (
@@ -6,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	kl "github.com/daemon1024/bluelock/common"
+	kl "github.com/accuknox/bluelock/common"
 	"github.com/google/uuid"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	"github.com/kubearmor/KubeArmor/KubeArmor/types"

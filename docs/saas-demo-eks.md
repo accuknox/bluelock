@@ -36,7 +36,7 @@ Original Deployment:
       ...
       containers:
         - name: container
-          image: daemon1024/ka-socat-demo
+          image: accuknox/ka-socat-demo
           imagePullPolicy: Always
           ports:
             - containerPort: 1337
@@ -52,7 +52,7 @@ Modified Deployment:
           name: kubearmor-dir
       initContainers:
         - name: bluelock
-          image: daemon1024/bluelock
+          image: accuknox/bluelock
           imagePullPolicy: Always
           volumeMounts:
             - mountPath: /kubearmor
@@ -91,12 +91,12 @@ eksctl create fargateprofile --namespace accuknox-agents --cluster kubearmor-far
 3. Deploy KubeArmor relay server
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/daemon1024/bluelock/master/relay-deployment.yaml
+kubectl apply -f https://raw.githubusercontent.com/accuknox/bluelock/refs/heads/master/deployments/kubernetes/relay-deployment.yaml
 ```
 4. Deploy BlueLock + Demo App
 
 ```
-kubectl apply -f https://raw.githubusercontent.com/daemon1024/bluelock/master/deployment.yaml
+kubectl apply -f https://raw.githubusercontent.com/accuknox/bluelock/refs/heads/master/deployments/kubernetes/deployment.yaml
 ```
 5. Onboard Cluster to Accuknox Saas
 
@@ -115,7 +115,7 @@ kubectl apply -f https://raw.githubusercontent.com/daemon1024/bluelock/master/de
     
     1. Sample Service Account Token Lenient Whitelist Policy
     ```
-    https://github.com/daemon1024/bluelock/blob/master/test/bluelock-sa-policy.yaml
+    https://raw.githubusercontent.com/accuknox/bluelock/refs/heads/master/test/bluelock-sa-policy.yaml
     ```
     Apply using SaaS
     ![](https://hackmd.io/_uploads/r1CXZ2Tr2.png)
