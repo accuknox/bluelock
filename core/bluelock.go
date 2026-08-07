@@ -217,19 +217,40 @@ func BlueLock() {
 
 			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
 
-			nodeData, containers, err := GetFargateMetadata()
-			if err == nil {
-				kg.Printf("Fetched node info NAME=%s", nodeData.NodeName)
-				dm.NodeLock.Lock()
-				dm.Node = nodeData
-				dm.NodeLock.Unlock()
+			var nodeData tp.Node
+			var containers map[string]tp.Container
 
-				kg.Printf("Fetched %d containers", len(containers))
-				dm.ContainersLock.Lock()
-				dm.Containers = containers
-				dm.ContainersLock.Unlock()
+			// check if running in Fargate or ACA
+			if _, ok := os.LookupEnv("ECS_CONTAINER_METADATA_URI_V4"); ok {
+				// running in Fargate
+				nodeData, containers, err = GetFargateMetadata()
+				if err == nil {
+					kg.Printf("Fetched node info NAME=%s", nodeData.NodeName)
+					dm.NodeLock.Lock()
+					dm.Node = nodeData
+					dm.NodeLock.Unlock()
+
+					kg.Printf("Fetched %d containers", len(containers))
+					dm.ContainersLock.Lock()
+					dm.Containers = containers
+					dm.ContainersLock.Unlock()
+				}
+			} else if _, ok := os.LookupEnv("CONTAINER_APP_NAME"); ok {
+				// running in ACA
+				nodeData, containers, err = GetACAMetadata(containerID)
+				if err == nil {
+					kg.Printf("Fetched node info NAME=%s", nodeData.NodeName)
+					dm.NodeLock.Lock()
+					dm.Node = nodeData
+					dm.NodeLock.Unlock()
+
+					kg.Printf("Fetched %d containers", len(containers))
+					dm.ContainersLock.Lock()
+					dm.Containers = containers
+					dm.ContainersLock.Unlock()
+				}
 			} else {
-				kg.Errf("Error fetching Fargate metadata: %v", err.Error())
+				kg.Errf("Error fetching metadata: %v", err.Error())
 				dm.ContainersLock.Lock()
 				dm.Container.NamespaceName = "container_namespace"
 				dm.Containers[containerID] = dm.Container
