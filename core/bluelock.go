@@ -5,6 +5,7 @@ package core
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	pb "github.com/kubearmor/KubeArmor/protobuf"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -86,7 +88,7 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	dm.K8sEnabled = false
 	dm.K8sPod = tp.K8sPod{}
 	dm.EndPoint = tp.EndPoint{}
-	dm.Container = tp.Container{}
+	dm.Container = tp.Container{} // self
 	dm.SecurityPolicies = []tp.SecurityPolicy{}
 	dm.SecurityPoliciesLock = new(sync.RWMutex)
 	dm.Logger = nil
@@ -176,10 +178,20 @@ func BlueLock() {
 	}
 	kg.Print("Initialized KubeArmor Logger")
 
-	// health server
-	if dm.Logger.LogServer != nil {
+	// health server — dedicated gRPC server for healthcheck since grpc probes are not supported with TLS
+	healthLis, err := net.Listen("tcp", ":"+cfg.GlobalCfg.GRPCHealthPort)
+	if err != nil {
+		kg.Errf("Failed to listen on plaintext health port %s: %v", cfg.GlobalCfg.GRPCHealthPort, err)
+	} else {
 		dm.GRPCHealthServer = health.NewServer()
-		grpc_health_v1.RegisterHealthServer(dm.Logger.LogServer, dm.GRPCHealthServer)
+		healthServer := grpc.NewServer()
+		grpc_health_v1.RegisterHealthServer(healthServer, dm.GRPCHealthServer)
+		go func() {
+			kg.Printf("Started gRPC health probe on port %s", cfg.GlobalCfg.GRPCHealthPort)
+			if err := healthServer.Serve(healthLis); err != nil {
+				kg.Warnf("Plaintext health gRPC server exited: %v", err)
+			}
+		}()
 	}
 
 	dm.DefaultPosture = tp.DefaultPosture{
@@ -216,6 +228,7 @@ func BlueLock() {
 			}
 
 			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
+			dm.Container.NamespaceName = "container_namespace"
 
 			var nodeData tp.Node
 			var containers map[string]tp.Container
@@ -252,7 +265,6 @@ func BlueLock() {
 			} else {
 				kg.Errf("Error fetching metadata: %v", err.Error())
 				dm.ContainersLock.Lock()
-				dm.Container.NamespaceName = "container_namespace"
 				dm.Containers[containerID] = dm.Container
 				dm.ContainersLock.Unlock()
 			}
