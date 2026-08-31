@@ -22,6 +22,9 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 	//var payload []byte
 	//var err error
 
+	// required fields, must be present in all logs and alerts
+	// NamespaceName, PodName, Operation
+
 	kubearmorLog.HostName = fd.HostName
 
 	kubearmorLog.PolicyEnabled = 0
@@ -44,7 +47,11 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 
 		pbAlert.NamespaceName = kubearmorLog.NamespaceName
 
-		pbAlert.PodName = kubearmorLog.PodName
+		pbAlert.PodName = kubearmorLog.ContainerName
+		if kubearmorLog.PodName != "" {
+			pbAlert.PodName = kubearmorLog.PodName
+		}
+
 		pbAlert.Labels = kubearmorLog.Labels
 
 		pbAlert.ContainerID = kubearmorLog.ContainerID
@@ -123,7 +130,11 @@ func (fd *Feeder) PushLogRelay(kubearmorLog tp.Log) {
 
 		pbLog.NamespaceName = kubearmorLog.NamespaceName
 
-		pbLog.PodName = kubearmorLog.PodName
+		pbLog.PodName = kubearmorLog.ContainerName
+		if kubearmorLog.PodName != "" {
+			pbLog.PodName = kubearmorLog.PodName
+		}
+
 		pbLog.Labels = kubearmorLog.Labels
 
 		pbLog.ContainerID = kubearmorLog.ContainerID
