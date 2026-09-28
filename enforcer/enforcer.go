@@ -1,7 +1,10 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package enforcer
 
 import (
-	"github.com/daemon1024/bluelock/feeder"
+	"github.com/accuknox/bluelock/feeder"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
 

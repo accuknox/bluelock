@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package config
 
 import (
@@ -22,6 +25,8 @@ type BluelockConfig struct {
 	RelayServerURL string // RelayServerURL to which logs will be pushed
 
 	StateAgent bool // enable KubeArmor state agent
+
+	GRPCHealthPort string // gRPC Health Port to use
 }
 
 var GlobalCfg BluelockConfig
@@ -47,6 +52,9 @@ const ConfigStateAgent string = "enableKubeArmorStateAgent"
 // ConfigRelayServerURL Path key
 const ConfigRelayServerURL string = "relayServerURL"
 
+// ConfigGRPCHealthPort gRPC Health Port key
+const ConfigGRPCHealthPort string = "grpcHealthPort"
+
 func readCmdLineParameters() {
 	containerName := flag.String(ConfigContainerName, "", "container/service name to match policies. only needed in case of unorchestrated containers")
 
@@ -60,6 +68,8 @@ func readCmdLineParameters() {
 	stateAgent := flag.Bool(ConfigStateAgent, true, "enabling KubeArmor State Agent client")
 
 	relayServerURLStr := flag.String(ConfigRelayServerURL, "http://localhost:2801/", "relay-server http URL listening for logs")
+
+	grpcHealthPort := flag.String(ConfigGRPCHealthPort, "32766", "gRPC Health Check Port to use")
 
 	flag.Parse()
 
@@ -75,6 +85,8 @@ func readCmdLineParameters() {
 	viper.SetDefault(ConfigStateAgent, *stateAgent)
 
 	viper.SetDefault(ConfigRelayServerURL, *relayServerURLStr)
+
+	viper.SetDefault(ConfigGRPCHealthPort, *grpcHealthPort)
 
 }
 
@@ -109,6 +121,7 @@ func LoadConfig() error {
 		LogPath:               viper.GetString(ConfigLogPath),
 		StateAgent:            viper.GetBool(ConfigStateAgent),
 		RelayServerURL:        relayURL.String(),
+		GRPCHealthPort:        viper.GetString(ConfigGRPCHealthPort),
 	}
 
 	kg.Printf("Final Configuration [%+v]", GlobalCfg)

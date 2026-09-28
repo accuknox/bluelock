@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package enforcer
 
 import (
@@ -391,7 +394,7 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 	if val, ok := rules[InnerKey{
 		Path:   path,
 		Source: source,
-	}]; ok {
+	}]; ok && !val.Hint {
 		match = true
 		matchedValue = val
 		return match, matchedValue
@@ -433,7 +436,7 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 	if val, ok := rules[InnerKey{
 		Path:   path,
 		Source: "",
-	}]; ok {
+	}]; ok && !val.Hint {
 		match = true
 		matchedValue = val
 		return match, matchedValue

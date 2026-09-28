@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 //go:build linux
 // +build linux
 
@@ -6,7 +9,7 @@ package main
 import (
 	"os"
 
-	"github.com/daemon1024/bluelock/core"
+	"github.com/accuknox/bluelock/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 )
 

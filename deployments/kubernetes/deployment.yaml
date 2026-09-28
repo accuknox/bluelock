@@ -18,7 +18,7 @@ spec:
       # init contianer injects bluelock binary into a shared volume
       initContainers:
         - name: bluelock
-          image: daemon1024/bluelock
+          image: accuknox/bluelock
           imagePullPolicy: Always
           volumeMounts:
             - mountPath: /kubearmor

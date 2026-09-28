@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package feeder
 
 import (
@@ -8,7 +11,7 @@ import (
 	"strings"
 	"syscall"
 
-	cfg "github.com/daemon1024/bluelock/config"
+	cfg "github.com/accuknox/bluelock/config"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
@@ -446,10 +449,15 @@ func (fd *Feeder) UpdateMatchedPolicy(log tp.Log) tp.Log {
 					}
 
 					// match resources
-					if matchedRegex || (secPolicy.ResourceType == "Path" && secPolicy.Resource == firstLogResource) ||
+					if matchedRegex ||
+						(secPolicy.ResourceType == "Path" && secPolicy.Resource == firstLogResource) ||
 						(secPolicy.ResourceType == "Directory" && strings.HasPrefix(firstLogResourceDir, secPolicy.Resource) &&
 							((!secPolicy.Recursive && firstLogResourceDirCount == strings.Count(secPolicy.Resource, "/")) ||
-								(secPolicy.Recursive && firstLogResourceDirCount >= strings.Count(secPolicy.Resource, "/")))) {
+								(secPolicy.Recursive && firstLogResourceDirCount >= strings.Count(secPolicy.Resource, "/")))) ||
+						// exact matching - check if the policy's resource is exactly the logged resource with a trailing slash
+						(secPolicy.Resource == (log.Resource + "/")) ||
+						// match if the policy is recursive and applies to the root directory
+						(secPolicy.Resource == "/" && secPolicy.Recursive) {
 
 						matchedFlags := false
 

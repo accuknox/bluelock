@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package feeder
 
 import (
@@ -10,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	cfg "github.com/daemon1024/bluelock/config"
+	cfg "github.com/accuknox/bluelock/config"
 	types "github.com/falcosecurity/falcosidekick/types"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )

@@ -1,19 +1,24 @@
+// SPDX-License-Identifier: MIT
+// Copyright 2026 Authors of Bluelock
+
 package core
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
 	"sync"
 
-	cfg "github.com/daemon1024/bluelock/config"
-	"github.com/daemon1024/bluelock/enforcer"
-	"github.com/daemon1024/bluelock/feeder"
-	"github.com/daemon1024/bluelock/state"
+	cfg "github.com/accuknox/bluelock/config"
+	"github.com/accuknox/bluelock/enforcer"
+	"github.com/accuknox/bluelock/feeder"
+	"github.com/accuknox/bluelock/state"
 	"github.com/kubearmor/KubeArmor/KubeArmor/core"
 	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 	pb "github.com/kubearmor/KubeArmor/protobuf"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
@@ -83,7 +88,7 @@ func NewBlueLockDaemon() *BlueLockDaemon {
 	dm.K8sEnabled = false
 	dm.K8sPod = tp.K8sPod{}
 	dm.EndPoint = tp.EndPoint{}
-	dm.Container = tp.Container{}
+	dm.Container = tp.Container{} // self
 	dm.SecurityPolicies = []tp.SecurityPolicy{}
 	dm.SecurityPoliciesLock = new(sync.RWMutex)
 	dm.Logger = nil
@@ -173,10 +178,20 @@ func BlueLock() {
 	}
 	kg.Print("Initialized KubeArmor Logger")
 
-	// health server
-	if dm.Logger.LogServer != nil {
+	// health server — dedicated gRPC server for healthcheck since grpc probes are not supported with TLS
+	healthLis, err := net.Listen("tcp", ":"+cfg.GlobalCfg.GRPCHealthPort)
+	if err != nil {
+		kg.Errf("Failed to listen on plaintext health port %s: %v", cfg.GlobalCfg.GRPCHealthPort, err)
+	} else {
 		dm.GRPCHealthServer = health.NewServer()
-		grpc_health_v1.RegisterHealthServer(dm.Logger.LogServer, dm.GRPCHealthServer)
+		healthServer := grpc.NewServer()
+		grpc_health_v1.RegisterHealthServer(healthServer, dm.GRPCHealthServer)
+		go func() {
+			kg.Printf("Started gRPC health probe on port %s", cfg.GlobalCfg.GRPCHealthPort)
+			if err := healthServer.Serve(healthLis); err != nil {
+				kg.Warnf("Plaintext health gRPC server exited: %v", err)
+			}
+		}()
 	}
 
 	dm.DefaultPosture = tp.DefaultPosture{
@@ -213,23 +228,37 @@ func BlueLock() {
 			}
 
 			dm.Container.ContainerName = cfg.GlobalCfg.ContainerName
+			dm.Container.NamespaceName = "container_namespace"
 
-			nodeData, containers, err := GetFargateMetadata()
-			if err == nil {
+			var nodeData tp.Node
+			var containers map[string]tp.Container
+			var err error
+
+			if _, ok := os.LookupEnv("ECS_CONTAINER_METADATA_URI_V4"); ok {
+				// running in Fargate
+				nodeData, containers, err = GetFargateMetadata()
+			} else if _, ok := os.LookupEnv("CONTAINER_APP_NAME"); ok {
+				// running in ACA
+				nodeData, containers, err = GetACAMetadata(containerID)
+			} else {
+				// not running in Fargate or ACA
+				err = fmt.Errorf("not running in Fargate or ACA")
+			}
+
+			if err != nil {
+				kg.Errf("Error fetching metadata: %v", err)
+
+				dm.ContainersLock.Lock()
+				dm.Containers[containerID] = dm.Container
+				dm.ContainersLock.Unlock()
+			} else {
 				kg.Printf("Fetched node info NAME=%s", nodeData.NodeName)
 				dm.NodeLock.Lock()
 				dm.Node = nodeData
 				dm.NodeLock.Unlock()
-
 				kg.Printf("Fetched %d containers", len(containers))
 				dm.ContainersLock.Lock()
 				dm.Containers = containers
-				dm.ContainersLock.Unlock()
-			} else {
-				kg.Errf("Error fetching Fargate metadata: %v", err.Error())
-				dm.ContainersLock.Lock()
-				dm.Container.NamespaceName = "container_namespace"
-				dm.Containers[containerID] = dm.Container
 				dm.ContainersLock.Unlock()
 			}
 

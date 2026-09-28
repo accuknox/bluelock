@@ -1,4 +1,4 @@
-module github.com/daemon1024/bluelock
+module github.com/accuknox/bluelock
 
 go 1.26.0
 
@@ -158,7 +158,7 @@ require (
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/sys v0.43.0
 	golang.org/x/text v0.35.0 // indirect
-	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af // indirect
+	google.golang.org/protobuf v1.36.12-0.20260120151049-f2248ac996af
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/api v0.35.3
 	k8s.io/apimachinery v0.35.3
