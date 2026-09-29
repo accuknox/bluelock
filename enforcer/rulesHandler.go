@@ -91,7 +91,10 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(path.FromSource) == 0 {
 				if path.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					// ownerOnly rules enforce allow/block atomically at match time;
+					// they must not activate whitelist posture, which would
+					// block all other processes not explicitly in the allowlist.
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.ProcWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -108,7 +111,8 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range path.FromSource {
 					if path.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						// Same ownerOnly guard as above — no whitelist posture for ownerOnly rules.
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.ProcWhiteListPosture = true
 						}
 						rc.Allow = true

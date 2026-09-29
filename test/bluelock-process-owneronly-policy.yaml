@@ -1,0 +1,24 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: bluelock-process-owneronly
+spec:
+  severity: 5
+  message: "process execution restricted to file owner only"
+  tags:
+  - OWNER_ONLY
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: armored-container
+  process:
+    matchPaths:
+    - path: /usr/bin/bash
+      ownerOnly: true
+
+    # Test: run as the file owner (usually root for /usr/bin/bash) → allowed
+    #   bash
+    #
+    # Test: run as a different user → blocked
+    #   su - testuser -c /usr/bin/bash
+
+  action: Block
