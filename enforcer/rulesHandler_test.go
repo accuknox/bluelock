@@ -3,7 +3,11 @@
 
 package enforcer
 
-import "testing"
+import (
+	"testing"
+
+	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
+)
 
 func TestDirToMap(t *testing.T) {
 	tests := []struct {
@@ -338,4 +342,155 @@ func TestDirToMapExistingHintPreservesHint(t *testing.T) {
 	if !got.Deny {
 		t.Error("expected Deny=true")
 	}
+}
+
+// TestUpdateRulesOwnerOnly verifies that the OwnerOnly flag is correctly
+// propagated from a SecurityPolicy spec into ProcessRules by UpdateRules.
+func TestUpdateRulesOwnerOnly(t *testing.T) {
+	pe := &PtraceEnforcer{Rules: CreateNewRuleSet()}
+	defaultPosture := tp.DefaultPosture{FileAction: "block"}
+
+	t.Run("ownerOnly Block rule without fromSource", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					Process: tp.ProcessType{
+						MatchPaths: []tp.ProcessPathType{
+							{
+								Path:      "/usr/bin/python3",
+								OwnerOnly: true,
+								Action:    "Block",
+							},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		key := InnerKey{Path: "/usr/bin/python3", Source: ""}
+		rc, ok := pe.Rules.ProcessRules[key]
+		if !ok {
+			t.Fatalf("expected rule for key %+v to exist in ProcessRules", key)
+		}
+		if !rc.OwnerOnly {
+			t.Errorf("expected OwnerOnly=true in stored rule, got %#v", rc)
+		}
+		if !rc.Deny {
+			t.Errorf("expected Deny=true for Block action, got %#v", rc)
+		}
+		if rc.Allow {
+			t.Errorf("expected Allow=false for Block action, got %#v", rc)
+		}
+	})
+
+	t.Run("ownerOnly Allow rule without fromSource", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					Process: tp.ProcessType{
+						MatchPaths: []tp.ProcessPathType{
+							{
+								Path:      "/usr/bin/bash",
+								OwnerOnly: true,
+								Action:    "Allow",
+							},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		key := InnerKey{Path: "/usr/bin/bash", Source: ""}
+		rc, ok := pe.Rules.ProcessRules[key]
+		if !ok {
+			t.Fatalf("expected rule for key %+v to exist in ProcessRules", key)
+		}
+		if !rc.OwnerOnly {
+			t.Errorf("expected OwnerOnly=true in stored rule, got %#v", rc)
+		}
+		if !rc.Allow {
+			t.Errorf("expected Allow=true for Allow action, got %#v", rc)
+		}
+		if rc.Deny {
+			t.Errorf("expected Deny=false for Allow action, got %#v", rc)
+		}
+		// Regression: ownerOnly + Allow must NOT activate whitelist posture.
+		// If it did, all other processes (e.g. bash exec'd by socat) would be
+		// blocked by the posture check even though they have nothing to do with
+		// the ownerOnly policy.
+		if pe.Rules.ProcWhiteListPosture {
+			t.Error("ownerOnly + Allow must not set ProcWhiteListPosture (socat regression)")
+		}
+	})
+
+	t.Run("ownerOnly Block rule with fromSource", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					Process: tp.ProcessType{
+						MatchPaths: []tp.ProcessPathType{
+							{
+								Path:      "/usr/bin/python3",
+								OwnerOnly: true,
+								Action:    "Block",
+								FromSource: []tp.MatchSourceType{
+									{Path: "/usr/bin/bash"},
+								},
+							},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		// Source-specific key must carry OwnerOnly.
+		key := InnerKey{Path: "/usr/bin/python3", Source: "/usr/bin/bash"}
+		rc, ok := pe.Rules.ProcessRules[key]
+		if !ok {
+			t.Fatalf("expected source-specific rule %+v to exist", key)
+		}
+		if !rc.OwnerOnly {
+			t.Errorf("expected OwnerOnly=true in fromSource rule, got %#v", rc)
+		}
+		if !rc.Deny {
+			t.Errorf("expected Deny=true for Block action with fromSource, got %#v", rc)
+		}
+
+		// No global (no-source) entry should be created.
+		globalKey := InnerKey{Path: "/usr/bin/python3", Source: ""}
+		if _, exists := pe.Rules.ProcessRules[globalKey]; exists {
+			t.Errorf("did not expect a no-source rule when fromSource is specified")
+		}
+	})
+
+	t.Run("rule without ownerOnly has OwnerOnly=false", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					Process: tp.ProcessType{
+						MatchPaths: []tp.ProcessPathType{
+							{
+								Path:      "/usr/bin/ls",
+								OwnerOnly: false,
+								Action:    "Block",
+							},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		key := InnerKey{Path: "/usr/bin/ls", Source: ""}
+		rc, ok := pe.Rules.ProcessRules[key]
+		if !ok {
+			t.Fatalf("expected rule for key %+v to exist", key)
+		}
+		if rc.OwnerOnly {
+			t.Errorf("expected OwnerOnly=false for rule without ownerOnly, got %#v", rc)
+		}
+	})
 }

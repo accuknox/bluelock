@@ -84,6 +84,18 @@ func absPath(pid int, p string) string {
 	return path.Clean(p)
 }
 
+func getFileOwnerUID(filePath string) int32 {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return -1
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return -1
+	}
+	return int32(stat.Uid)
+}
+
 func clen(b []byte) int {
 	for i := 0; i < len(b); i++ {
 		if b[i] == 0 {
