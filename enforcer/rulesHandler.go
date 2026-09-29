@@ -169,6 +169,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 		// parse durectory rules
 		for _, dir := range secPolicy.Spec.File.MatchDirectories {
 			var rc RuleConfig
+			dirPath := ensureTrailingSlash(dir.Directory)
 
 			rc.OwnerOnly = dir.OwnerOnly
 			rc.ReadOnly = dir.ReadOnly
@@ -185,7 +186,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 					rc.Allow = false
 					rc.Deny = true
 				}
-				dirtoMap(InnerKey{Path: dir.Directory}, newRules.FileRules, rc)
+				dirtoMap(InnerKey{Path: dirPath}, newRules.FileRules, rc)
 			} else {
 				for _, src := range dir.FromSource {
 					if dir.Action == "Allow" {
@@ -198,13 +199,57 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 						rc.Allow = false
 						rc.Deny = true
 					}
-					dirtoMap(InnerKey{Path: dir.Directory, Source: src.Path}, newRules.FileRules, rc)
+					dirtoMap(InnerKey{Path: dirPath, Source: src.Path}, newRules.FileRules, rc)
+				}
+			}
+		}
+
+		// parse process directory rules
+		for _, dir := range secPolicy.Spec.Process.MatchDirectories {
+			var rc RuleConfig
+			dirPath := ensureTrailingSlash(dir.Directory)
+
+			rc.OwnerOnly = dir.OwnerOnly
+			rc.Recursive = dir.Recursive
+
+			if len(dir.FromSource) == 0 {
+				if dir.Action == "Allow" {
+					if defaultPosture.FileAction == "block" {
+						newRules.FileWhiteListPosture = true
+					}
+					rc.Allow = true
+					rc.Deny = false
+				} else if dir.Action == "Block" {
+					rc.Allow = false
+					rc.Deny = true
+				}
+				dirtoMap(InnerKey{Path: dirPath}, newRules.ProcessRules, rc)
+			} else {
+				for _, src := range dir.FromSource {
+					if dir.Action == "Allow" {
+						if defaultPosture.FileAction == "block" {
+							newRules.FileWhiteListPosture = true
+						}
+						rc.Allow = true
+						rc.Deny = false
+					} else if dir.Action == "Block" {
+						rc.Allow = false
+						rc.Deny = true
+					}
+					dirtoMap(InnerKey{Path: dirPath, Source: src.Path}, newRules.ProcessRules, rc)
 				}
 			}
 		}
 	}
 
 	pe.Rules = newRules
+}
+
+func ensureTrailingSlash(p string) string {
+	if !strings.HasSuffix(p, "/") {
+		return p + "/"
+	}
+	return p
 }
 
 // dirtoMap extracts parent directories from the Path Key and adds it as hints in the Container Rule Map

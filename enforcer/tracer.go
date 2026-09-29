@@ -410,14 +410,21 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 		}]; ok {
 			match = false
 			if val.Dir {
-				match = true
-				if val.Recursive && !val.Hint {
-					matchedValue = val
-					return match, matchedValue
-				} else if val.Recursive && val.Hint {
+				if val.Recursive {
+					// Actual recursive directory rule.
+					if !val.Hint {
+						return true, val
+					}
 					hint = true
 					matchedValue = val
 				} else {
+					// Non-recursive directory rule.
+					// Only match direct children.
+					if len(paths)-i == 1 {
+						return true, val
+					}
+					// The target is deeper than a direct child,
+					// so this directory rule does not match it.
 					continue
 				}
 			}
@@ -426,11 +433,8 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 			}
 		}
 	}
-	if hint || match {
-		if hint {
-			match = true
-		}
-		return match, matchedValue
+	if hint {
+		return true, matchedValue
 	}
 
 	if val, ok := rules[InnerKey{
@@ -454,14 +458,21 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 		}]; ok {
 			match = false
 			if val.Dir {
-				match = true
-				if val.Recursive && !val.Hint {
-					matchedValue = val
-					return match, matchedValue
-				} else if val.Recursive && val.Hint {
+				if val.Recursive {
+					// Actual recursive directory rule.
+					if !val.Hint {
+						return true, val
+					}
 					hint = true
 					matchedValue = val
 				} else {
+					// Non-recursive directory rule.
+					// Only match direct children.
+					if len(paths)-i == 1 {
+						return true, val
+					}
+					// The target is deeper than a direct child,
+					// so this directory rule does not match it.
 					continue
 				}
 			}
@@ -470,11 +481,8 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 			}
 		}
 	}
-	if hint || match {
-		if hint {
-			match = true
-		}
-		return match, matchedValue
+	if hint {
+		return true, matchedValue
 	}
 
 	return false, RuleConfig{}
