@@ -49,7 +49,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(path.FromSource) == 0 {
 				if path.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.FileWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -66,7 +66,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range path.FromSource {
 					if path.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.FileWhiteListPosture = true
 						}
 						rc.Allow = true
@@ -181,7 +181,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(dir.FromSource) == 0 {
 				if dir.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.FileWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -194,7 +194,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range dir.FromSource {
 					if dir.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.FileWhiteListPosture = true
 						}
 						rc.Allow = true
@@ -218,7 +218,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(dir.FromSource) == 0 {
 				if dir.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.FileWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -231,7 +231,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range dir.FromSource {
 					if dir.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.FileWhiteListPosture = true
 						}
 						rc.Allow = true

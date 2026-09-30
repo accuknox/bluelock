@@ -262,7 +262,21 @@ func (t *Tracer) handle(pid int) {
 
 		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.FileRules)
 		if match {
-			if matchedValue.Deny {
+			if matchedValue.OwnerOnly {
+				fileOwnerUID := getFileOwnerUID(log.Resource)
+				if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+					// Caller is NOT the file owner → block
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				} else if fileOwnerUID >= 0 {
+					// Caller IS the file owner → allow, skip further deny checks
+					return
+				}
+			} else if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
@@ -270,7 +284,7 @@ func (t *Tracer) handle(pid int) {
 				log.Action = "Block"
 				log.Result = "Permission denied"
 			}
-			if matchedValue.Allow {
+			if matchedValue.Allow && !matchedValue.OwnerOnly {
 				// Matched Policy and Allowed so we skip the log
 				return
 			}
@@ -279,7 +293,7 @@ func (t *Tracer) handle(pid int) {
 			regs.Orig_rax = ^uint64(0)
 			regs.Rax = EPERM
 			_ = syscall.PtraceSetRegs(pid, &regs)
-			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 			log.Action = "Block"
 			log.Result = "Permission denied"
 		}

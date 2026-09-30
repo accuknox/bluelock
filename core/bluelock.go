@@ -337,7 +337,7 @@ func BlueLock() {
 
 	// extra line for clean log
 	fmt.Println()
-	kg.Printf("Quitting Kubearmor")
+	kg.Printf("Quitting Bluelock")
 	//close(StopChan)
 
 	// destroy the daemon
