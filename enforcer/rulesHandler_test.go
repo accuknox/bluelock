@@ -494,3 +494,156 @@ func TestUpdateRulesOwnerOnly(t *testing.T) {
 		}
 	})
 }
+
+// TestUpdateRulesFilePatterns verifies that File.MatchPatterns are parsed into
+// FilePatternRules by UpdateRules: regexps compiled, RuleConfig populated,
+// and whitelist posture activated only where appropriate.
+func TestUpdateRulesFilePatterns(t *testing.T) {
+	pe := &PtraceEnforcer{Rules: CreateNewRuleSet()}
+	defaultPosture := tp.DefaultPosture{FileAction: "block"}
+
+	t.Run("Block pattern stored in FilePatternRules", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: `.*\.log$`, Action: "Block"},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 1 {
+			t.Fatalf("expected 1 FilePatternRule, got %d", len(pe.Rules.FilePatternRules))
+		}
+		pr := pe.Rules.FilePatternRules[0]
+		if pr.Re == nil {
+			t.Fatal("expected compiled regexp, got nil")
+		}
+		if !pr.Cfg.Deny {
+			t.Errorf("expected Deny=true for Block pattern, got %#v", pr.Cfg)
+		}
+		if pr.Cfg.Allow {
+			t.Errorf("expected Allow=false for Block pattern, got %#v", pr.Cfg)
+		}
+		// Block pattern must not activate whitelist posture.
+		if pe.Rules.FileWhiteListPosture {
+			t.Error("Block pattern must not set FileWhiteListPosture")
+		}
+	})
+
+	t.Run("Allow pattern activates FileWhiteListPosture when posture is block", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: `.*\.conf$`, Action: "Allow"},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 1 {
+			t.Fatalf("expected 1 FilePatternRule, got %d", len(pe.Rules.FilePatternRules))
+		}
+		if !pe.Rules.FilePatternRules[0].Cfg.Allow {
+			t.Errorf("expected Allow=true for Allow pattern")
+		}
+		if !pe.Rules.FileWhiteListPosture {
+			t.Error("expected FileWhiteListPosture=true for non-ownerOnly Allow pattern with block posture")
+		}
+	})
+
+	t.Run("ownerOnly Allow pattern does not activate FileWhiteListPosture", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: `/home/.*`, OwnerOnly: true, Action: "Allow"},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 1 {
+			t.Fatalf("expected 1 FilePatternRule, got %d", len(pe.Rules.FilePatternRules))
+		}
+		pr := pe.Rules.FilePatternRules[0]
+		if !pr.Cfg.OwnerOnly {
+			t.Errorf("expected OwnerOnly=true, got %#v", pr.Cfg)
+		}
+		if pe.Rules.FileWhiteListPosture {
+			t.Error("ownerOnly Allow pattern must not set FileWhiteListPosture")
+		}
+	})
+
+	t.Run("ReadOnly flag propagated from FilePatternType", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: `/etc/.*`, ReadOnly: true, Action: "Block"},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 1 {
+			t.Fatalf("expected 1 FilePatternRule, got %d", len(pe.Rules.FilePatternRules))
+		}
+		if !pe.Rules.FilePatternRules[0].Cfg.ReadOnly {
+			t.Errorf("expected ReadOnly=true, got %#v", pe.Rules.FilePatternRules[0].Cfg)
+		}
+	})
+
+	t.Run("invalid regexp is skipped without panic", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: `[invalid(`, Action: "Block"},   // bad regexp
+							{Pattern: `.*\.sh$`, Action: "Block"},     // valid, must still be added
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 1 {
+			t.Fatalf("expected 1 valid FilePatternRule (bad one skipped), got %d", len(pe.Rules.FilePatternRules))
+		}
+	})
+
+	t.Run("empty pattern string is skipped", func(t *testing.T) {
+		pe.Rules = CreateNewRuleSet()
+		pe.UpdateRules([]tp.SecurityPolicy{
+			{
+				Spec: tp.SecuritySpec{
+					File: tp.FileType{
+						MatchPatterns: []tp.FilePatternType{
+							{Pattern: "", Action: "Block"},
+						},
+					},
+				},
+			},
+		}, defaultPosture)
+
+		if len(pe.Rules.FilePatternRules) != 0 {
+			t.Errorf("expected 0 FilePatternRules for empty pattern, got %d", len(pe.Rules.FilePatternRules))
+		}
+	})
+}

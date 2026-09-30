@@ -289,6 +289,26 @@ func (t *Tracer) handle(pid int) {
 				return
 			}
 		}
+
+		// Pattern matching: only evaluated when no exact/directory rule matched.
+		// Exact/directory rules always take priority over matchPatterns.
+		if !match {
+			if pmatch, pmatchedValue := matchPatternRules(log.Resource, t.Rules.FilePatternRules); pmatch {
+				match = true
+				if pmatchedValue.Deny {
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (pattern match)\n", log.Operation, log.Resource)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				}
+				if pmatchedValue.Allow {
+					return
+				}
+			}
+		}
+
 		if t.Rules.FileWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
 			regs.Rax = EPERM
@@ -513,5 +533,25 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 		return true, matchedValue
 	}
 
+	return false, RuleConfig{}
+}
+
+// matchPatternRules checks whether path matches any compiled pattern rule.
+// First match wins, consistent with matchProcAndFileRules priority ordering.
+//
+// This function is intentionally generic — it operates on []PatternRule so it
+// can be reused for both file and process matchPatterns without any changes:
+//
+//	// File patterns (current):
+//	pmatch, pval := matchPatternRules(log.Resource, t.Rules.FilePatternRules)
+//
+//	// Process patterns (future — add ProcessPatternRules []PatternRule to RuleSet):
+//	pmatch, pval := matchPatternRules(log.Resource, t.Rules.ProcessPatternRules)
+func matchPatternRules(path string, rules []PatternRule) (bool, RuleConfig) {
+	for _, pr := range rules {
+		if pr.Re.MatchString(path) {
+			return true, pr.Cfg
+		}
+	}
 	return false, RuleConfig{}
 }

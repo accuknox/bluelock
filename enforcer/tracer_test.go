@@ -3,7 +3,11 @@
 
 package enforcer
 
-import "testing"
+import (
+	"regexp"
+	"testing"
+)
+
 
 func TestMatchProcAndFileRules(t *testing.T) {
 	rules := make(map[InnerKey]RuleConfig)
@@ -381,6 +385,102 @@ func TestMatchProcAndFileRulesHintRegression(t *testing.T) {
 					path,
 					rule,
 				)
+			}
+		})
+	}
+}
+
+// TestMatchPatternRules tests the generic matchPatternRules function.
+// The same function will be used for process matchPatterns in the future
+// (see the comment on matchPatternRules in tracer.go for usage).
+func TestMatchPatternRules(t *testing.T) {
+	mustCompile := func(pattern string) *regexp.Regexp {
+		re, err := regexp.Compile(pattern)
+		if err != nil {
+			t.Fatalf("failed to compile regexp %q: %v", pattern, err)
+		}
+		return re
+	}
+
+	logRule := PatternRule{
+		Re:  mustCompile(`.*\.log$`),
+		Cfg: RuleConfig{Deny: true},
+	}
+	confRule := PatternRule{
+		Re:  mustCompile(`/etc/.*\.conf$`),
+		Cfg: RuleConfig{Allow: true},
+	}
+
+	tests := []struct {
+		name      string
+		path      string
+		rules     []PatternRule
+		wantMatch bool
+		wantCfg   RuleConfig
+	}{
+		{
+			name:      "log pattern matches .log file",
+			path:      "/var/log/app.log",
+			rules:     []PatternRule{logRule},
+			wantMatch: true,
+			wantCfg:   RuleConfig{Deny: true},
+		},
+		{
+			name:      "log pattern does not match .txt file",
+			path:      "/var/log/app.txt",
+			rules:     []PatternRule{logRule},
+			wantMatch: false,
+		},
+		{
+			name:      "conf pattern matches /etc/*.conf",
+			path:      "/etc/ssh/sshd.conf",
+			rules:     []PatternRule{confRule},
+			wantMatch: true,
+			wantCfg:   RuleConfig{Allow: true},
+		},
+		{
+			name:      "conf pattern does not match /tmp/*.conf",
+			path:      "/tmp/test.conf",
+			rules:     []PatternRule{confRule},
+			wantMatch: false,
+		},
+		{
+			name:      "first-match-wins: log rule before conf rule",
+			path:      "/etc/app.log",
+			rules:     []PatternRule{logRule, confRule},
+			wantMatch: true,
+			wantCfg:   RuleConfig{Deny: true}, // logRule wins
+		},
+		{
+			name:      "first-match-wins: conf rule before log rule",
+			path:      "/etc/app.conf",
+			rules:     []PatternRule{confRule, logRule},
+			wantMatch: true,
+			wantCfg:   RuleConfig{Allow: true}, // confRule wins (/etc/*.conf matches)
+		},
+		{
+			name:      "empty rules slice returns no match",
+			path:      "/var/log/app.log",
+			rules:     []PatternRule{},
+			wantMatch: false,
+		},
+		{
+			name:      "nil rules slice returns no match",
+			path:      "/var/log/app.log",
+			rules:     nil,
+			wantMatch: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			gotMatch, gotCfg := matchPatternRules(tt.path, tt.rules)
+
+			if gotMatch != tt.wantMatch {
+				t.Fatalf("matchPatternRules(%q) match = %v, want %v", tt.path, gotMatch, tt.wantMatch)
+			}
+			if tt.wantMatch && gotCfg != tt.wantCfg {
+				t.Errorf("matchPatternRules(%q) cfg = %#v, want %#v", tt.path, gotCfg, tt.wantCfg)
 			}
 		})
 	}

@@ -4,15 +4,28 @@
 package enforcer
 
 import (
+	"regexp"
 	"strings"
 
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
+	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 )
+
+
+// PatternRule holds a compiled regexp and its associated enforcement config.
+// It is intentionally generic so it can be reused for both file and process
+// matchPatterns — ProcessPatternType and FilePatternType share the same
+// RuleConfig fields (OwnerOnly, ReadOnly, Deny, Allow).
+type PatternRule struct {
+	Re  *regexp.Regexp
+	Cfg RuleConfig
+}
 
 type RuleSet struct {
 	ProcessRules         map[InnerKey]RuleConfig
 	FileRules            map[InnerKey]RuleConfig
 	NetworkRules         map[InnerKey]RuleConfig
+	FilePatternRules     []PatternRule
 	ProcWhiteListPosture bool
 	FileWhiteListPosture bool
 	NetWhiteListPosture  bool
@@ -32,6 +45,7 @@ func CreateNewRuleSet() (r *RuleSet) {
 	r.ProcessRules = make(map[InnerKey]RuleConfig)
 	r.FileRules = make(map[InnerKey]RuleConfig)
 	r.NetworkRules = make(map[InnerKey]RuleConfig)
+	r.FilePatternRules = []PatternRule{}
 	return r
 }
 
@@ -243,6 +257,35 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 					dirtoMap(InnerKey{Path: dirPath, Source: src.Path}, newRules.ProcessRules, rc)
 				}
 			}
+		}
+
+		// parse file matchPatterns: compiled regexp, reused by matchPatternRules at enforcement time.
+		// Note: FilePatternType has no FromSource — patterns are always source-agnostic (KubeArmor design).
+		for _, pat := range secPolicy.Spec.File.MatchPatterns {
+			if len(pat.Pattern) == 0 {
+				continue
+			}
+			re, err := regexp.Compile(pat.Pattern)
+			if err != nil {
+				kg.Warnf("Skipping invalid File.matchPatterns regexp %q: %v\n", pat.Pattern, err)
+				continue
+			}
+			var rc RuleConfig
+			rc.OwnerOnly = pat.OwnerOnly
+			rc.ReadOnly = pat.ReadOnly
+			if pat.Action == "Allow" {
+				// ownerOnly patterns must not activate whitelist posture,
+				// same reasoning as for ownerOnly matchPaths.
+				if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
+					newRules.FileWhiteListPosture = true
+				}
+				rc.Allow = true
+				rc.Deny = false
+			} else if pat.Action == "Block" {
+				rc.Allow = false
+				rc.Deny = true
+			}
+			newRules.FilePatternRules = append(newRules.FilePatternRules, PatternRule{Re: re, Cfg: rc})
 		}
 	}
 
