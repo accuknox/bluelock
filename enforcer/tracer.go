@@ -224,6 +224,40 @@ func (t *Tracer) handle(pid int) {
 				return
 			}
 		}
+
+		// Pattern matching: only evaluated when no exact/directory rule matched.
+		// Exact/directory rules always take priority over matchPatterns.
+		if !match {
+			if pmatch, pmatchedValue := matchPatternRules(log.Resource, t.Rules.ProcessPatternRule); pmatch {
+				match = true
+				if pmatchedValue.OwnerOnly {
+					fileOwnerUID := getFileOwnerUID(log.Resource)
+					if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+						// Caller is NOT the file owner → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else if fileOwnerUID >= 0 {
+						// Caller IS the file owner → allow, skip further deny checks
+						return
+					}
+				} else if pmatchedValue.Deny {
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (pattern match)\n", log.Operation, log.Resource)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				}
+				if pmatchedValue.Allow {
+					return
+				}
+			}
+		}
+
 		if t.Rules.ProcWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
 			regs.Rax = EPERM
@@ -295,7 +329,21 @@ func (t *Tracer) handle(pid int) {
 		if !match {
 			if pmatch, pmatchedValue := matchPatternRules(log.Resource, t.Rules.FilePatternRules); pmatch {
 				match = true
-				if pmatchedValue.Deny {
+				if pmatchedValue.OwnerOnly {
+					fileOwnerUID := getFileOwnerUID(log.Resource)
+					if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+						// Caller is NOT the file owner → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else if fileOwnerUID >= 0 {
+						// Caller IS the file owner → allow, skip further deny checks
+						return
+					}
+				} else if pmatchedValue.Deny {
 					regs.Orig_rax = ^uint64(0)
 					regs.Rax = EPERM
 					_ = syscall.PtraceSetRegs(pid, &regs)
