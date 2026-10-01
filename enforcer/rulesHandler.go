@@ -4,15 +4,28 @@
 package enforcer
 
 import (
+	"regexp"
 	"strings"
 
+	kg "github.com/kubearmor/KubeArmor/KubeArmor/log"
 	tp "github.com/kubearmor/KubeArmor/KubeArmor/types"
 )
+
+// PatternRule holds a compiled regexp and its associated enforcement config.
+// It is intentionally generic so it can be reused for both file and process
+// matchPatterns — ProcessPatternType and FilePatternType share the same
+// RuleConfig fields (OwnerOnly, ReadOnly, Deny, Allow).
+type PatternRule struct {
+	Re  *regexp.Regexp
+	Cfg RuleConfig
+}
 
 type RuleSet struct {
 	ProcessRules         map[InnerKey]RuleConfig
 	FileRules            map[InnerKey]RuleConfig
 	NetworkRules         map[InnerKey]RuleConfig
+	ProcessPatternRule   []PatternRule
+	FilePatternRules     []PatternRule
 	ProcWhiteListPosture bool
 	FileWhiteListPosture bool
 	NetWhiteListPosture  bool
@@ -32,6 +45,8 @@ func CreateNewRuleSet() (r *RuleSet) {
 	r.ProcessRules = make(map[InnerKey]RuleConfig)
 	r.FileRules = make(map[InnerKey]RuleConfig)
 	r.NetworkRules = make(map[InnerKey]RuleConfig)
+	r.ProcessPatternRule = []PatternRule{}
+	r.FilePatternRules = []PatternRule{}
 	return r
 }
 
@@ -49,7 +64,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(path.FromSource) == 0 {
 				if path.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.FileWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -66,7 +81,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range path.FromSource {
 					if path.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.FileWhiteListPosture = true
 						}
 						rc.Allow = true
@@ -91,7 +106,10 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(path.FromSource) == 0 {
 				if path.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					// ownerOnly rules enforce allow/block atomically at match time;
+					// they must not activate whitelist posture, which would
+					// block all other processes not explicitly in the allowlist.
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.ProcWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -108,7 +126,8 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 			} else {
 				for _, src := range path.FromSource {
 					if path.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						// Same ownerOnly guard as above — no whitelist posture for ownerOnly rules.
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.ProcWhiteListPosture = true
 						}
 						rc.Allow = true
@@ -169,6 +188,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 		// parse durectory rules
 		for _, dir := range secPolicy.Spec.File.MatchDirectories {
 			var rc RuleConfig
+			dirPath := ensureTrailingSlash(dir.Directory)
 
 			rc.OwnerOnly = dir.OwnerOnly
 			rc.ReadOnly = dir.ReadOnly
@@ -176,7 +196,7 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 
 			if len(dir.FromSource) == 0 {
 				if dir.Action == "Allow" {
-					if defaultPosture.FileAction == "block" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 						newRules.FileWhiteListPosture = true
 					}
 					rc.Allow = true
@@ -185,11 +205,11 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 					rc.Allow = false
 					rc.Deny = true
 				}
-				dirtoMap(InnerKey{Path: dir.Directory}, newRules.FileRules, rc)
+				dirtoMap(InnerKey{Path: dirPath}, newRules.FileRules, rc)
 			} else {
 				for _, src := range dir.FromSource {
 					if dir.Action == "Allow" {
-						if defaultPosture.FileAction == "block" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
 							newRules.FileWhiteListPosture = true
 						}
 						rc.Allow = true
@@ -198,13 +218,115 @@ func (pe *PtraceEnforcer) UpdateRules(securityPolicies []tp.SecurityPolicy, defa
 						rc.Allow = false
 						rc.Deny = true
 					}
-					dirtoMap(InnerKey{Path: dir.Directory, Source: src.Path}, newRules.FileRules, rc)
+					dirtoMap(InnerKey{Path: dirPath, Source: src.Path}, newRules.FileRules, rc)
 				}
 			}
+		}
+
+		// parse process directory rules
+		for _, dir := range secPolicy.Spec.Process.MatchDirectories {
+			var rc RuleConfig
+			dirPath := ensureTrailingSlash(dir.Directory)
+
+			rc.OwnerOnly = dir.OwnerOnly
+			rc.Recursive = dir.Recursive
+
+			if len(dir.FromSource) == 0 {
+				if dir.Action == "Allow" {
+					if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
+						newRules.FileWhiteListPosture = true
+					}
+					rc.Allow = true
+					rc.Deny = false
+				} else if dir.Action == "Block" {
+					rc.Allow = false
+					rc.Deny = true
+				}
+				dirtoMap(InnerKey{Path: dirPath}, newRules.ProcessRules, rc)
+			} else {
+				for _, src := range dir.FromSource {
+					if dir.Action == "Allow" {
+						if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
+							newRules.FileWhiteListPosture = true
+						}
+						rc.Allow = true
+						rc.Deny = false
+					} else if dir.Action == "Block" {
+						rc.Allow = false
+						rc.Deny = true
+					}
+					dirtoMap(InnerKey{Path: dirPath, Source: src.Path}, newRules.ProcessRules, rc)
+				}
+			}
+		}
+
+		// parse file matchPatterns: compiled regexp, reused by matchPatternRules at enforcement time.
+		// Note: FilePatternType has no FromSource — patterns are always source-agnostic (KubeArmor design).
+		for _, pat := range secPolicy.Spec.File.MatchPatterns {
+			if len(pat.Pattern) == 0 {
+				continue
+			}
+			re, err := regexp.Compile(pat.Pattern)
+			if err != nil {
+				kg.Warnf("Skipping invalid File.matchPatterns regexp %q: %v\n", pat.Pattern, err)
+				continue
+			}
+			var rc RuleConfig
+			rc.OwnerOnly = pat.OwnerOnly
+			rc.ReadOnly = pat.ReadOnly
+			if pat.Action == "Allow" {
+				// ownerOnly patterns must not activate whitelist posture,
+				// same reasoning as for ownerOnly matchPaths.
+				if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
+					newRules.FileWhiteListPosture = true
+				}
+				rc.Allow = true
+				rc.Deny = false
+			} else if pat.Action == "Block" {
+				rc.Allow = false
+				rc.Deny = true
+			}
+			newRules.FilePatternRules = append(newRules.FilePatternRules, PatternRule{Re: re, Cfg: rc})
+		}
+
+		// parse process matchPatterns: compiled regexp, reused by matchPatternRules at enforcement time.
+		// Note: ProcessPatternType has no FromSource — patterns are always source-agnostic (KubeArmor design).
+		for _, pat := range secPolicy.Spec.Process.MatchPatterns {
+			if len(pat.Pattern) == 0 {
+				continue
+			}
+			re, err := regexp.Compile(pat.Pattern)
+			if err != nil {
+				kg.Warnf("Skipping invalid Process.matchPatterns regexp %q: %v\n", pat.Pattern, err)
+				continue
+			}
+			var rc RuleConfig
+			rc.OwnerOnly = pat.OwnerOnly
+
+			if pat.Action == "Allow" {
+				// ownerOnly patterns must not activate whitelist posture,
+				// same reasoning as for ownerOnly matchPaths.
+				if defaultPosture.FileAction == "block" && !rc.OwnerOnly {
+					newRules.ProcWhiteListPosture = true
+				}
+				rc.Allow = true
+				rc.Deny = false
+			} else if pat.Action == "Block" {
+				rc.Allow = false
+				rc.Deny = true
+			}
+			newRules.ProcessPatternRule = append(newRules.ProcessPatternRule, PatternRule{Re: re, Cfg: rc})
 		}
 	}
 
 	pe.Rules = newRules
+}
+
+func ensureTrailingSlash(p string) string {
+	if !strings.HasSuffix(p, "/") {
+		return p + "/"
+	}
+	return p
 }
 
 // dirtoMap extracts parent directories from the Path Key and adds it as hints in the Container Rule Map

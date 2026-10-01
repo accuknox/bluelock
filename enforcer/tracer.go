@@ -37,6 +37,10 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 			"openat",
 			"socket",
 			"execve",
+			"unlink",
+			"unlinkat",
+			"mknod",
+			"mknodat",
 		},
 		Default: libseccomp.ActionAllow,
 	}
@@ -197,7 +201,21 @@ func (t *Tracer) handle(pid int) {
 
 		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.ProcessRules)
 		if match {
-			if matchedValue.Deny {
+			if matchedValue.OwnerOnly {
+				fileOwnerUID := getFileOwnerUID(log.Resource)
+				if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+					// Caller is NOT the file owner → block
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				} else if fileOwnerUID >= 0 {
+					// Caller IS the file owner → allow, skip further deny checks
+					return
+				}
+			} else if matchedValue.Deny {
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
@@ -205,16 +223,50 @@ func (t *Tracer) handle(pid int) {
 				log.Action = "Block"
 				log.Result = "Permission denied"
 			}
-			if matchedValue.Allow {
+			if matchedValue.Allow && !matchedValue.OwnerOnly {
 				// Matched Policy and Allowed so we skip the log
 				return
 			}
 		}
+
+		// Pattern matching: only evaluated when no exact/directory rule matched.
+		// Exact/directory rules always take priority over matchPatterns.
+		if !match {
+			if pmatch, pmatchedValue := matchPatternRules(log.Resource, t.Rules.ProcessPatternRule); pmatch {
+				match = true
+				if pmatchedValue.OwnerOnly {
+					fileOwnerUID := getFileOwnerUID(log.Resource)
+					if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+						// Caller is NOT the file owner → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else if fileOwnerUID >= 0 {
+						// Caller IS the file owner → allow, skip further deny checks
+						return
+					}
+				} else if pmatchedValue.Deny {
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (pattern match)\n", log.Operation, log.Resource)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				}
+				if pmatchedValue.Allow {
+					return
+				}
+			}
+		}
+
 		if t.Rules.ProcWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
 			regs.Rax = EPERM
 			_ = syscall.PtraceSetRegs(pid, &regs)
-			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 			log.Action = "Block"
 			log.Result = "Permission denied"
 		}
@@ -248,7 +300,38 @@ func (t *Tracer) handle(pid int) {
 
 		match, matchedValue := matchProcAndFileRules(log.Resource, log.Source, t.Rules.FileRules)
 		if match {
-			if matchedValue.Deny {
+			if matchedValue.OwnerOnly {
+				fileOwnerUID := getFileOwnerUID(log.Resource)
+				if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+					// Caller is NOT the file owner → block
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				} else if fileOwnerUID >= 0 {
+					// check readOnly
+					if matchedValue.ReadOnly && !(regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+						// caller is file owner, but file is readOnly and the operation is not open/openat → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (readOnly: caller UID %d is file owner, but operation is not open/openat)\n", log.Operation, log.Resource, log.UID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else {
+						// Caller IS the file owner, readOnly is false → allow, skip further deny checks
+						return
+					}
+				}
+			} else if matchedValue.Deny {
+				// file is readOnly and the operation is open/openat → allow
+				if matchedValue.ReadOnly && (regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+					return
+				}
+
+				// file is readOnly and the operation is not open/openat OR file is not readOnly → block
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
@@ -256,16 +339,67 @@ func (t *Tracer) handle(pid int) {
 				log.Action = "Block"
 				log.Result = "Permission denied"
 			}
-			if matchedValue.Allow {
+			if matchedValue.Allow && !matchedValue.OwnerOnly {
 				// Matched Policy and Allowed so we skip the log
 				return
 			}
 		}
+
+		// Pattern matching: only evaluated when no exact/directory rule matched.
+		// Exact/directory rules always take priority over matchPatterns.
+		if !match {
+			if pmatch, pmatchedValue := matchPatternRules(log.Resource, t.Rules.FilePatternRules); pmatch {
+				match = true
+				if pmatchedValue.OwnerOnly {
+					fileOwnerUID := getFileOwnerUID(log.Resource)
+					if fileOwnerUID >= 0 && fileOwnerUID != log.UID {
+						// Caller is NOT the file owner → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (ownerOnly: caller UID %d != file owner UID %d)\n", log.Operation, log.Resource, log.UID, fileOwnerUID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else if fileOwnerUID >= 0 {
+						// check readOnly
+						if pmatchedValue.ReadOnly && !(regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+							// caller is file owner, but file is readOnly and the operation is not open/openat → block
+							regs.Orig_rax = ^uint64(0)
+							regs.Rax = EPERM
+							_ = syscall.PtraceSetRegs(pid, &regs)
+							kg.Warnf("Denied %s %s (readOnly: caller UID %d is file owner, but operation is not open/openat)\n", log.Operation, log.Resource, log.UID)
+							log.Action = "Block"
+							log.Result = "Permission denied"
+						} else {
+							// Caller IS the file owner, readOnly is false → allow, skip further deny checks
+							return
+						}
+					}
+				} else if pmatchedValue.Deny {
+					// file is readOnly and the operation is open/openat → allow
+					if pmatchedValue.ReadOnly && (regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+						return
+					}
+
+					// file is readOnly and the operation is not open/openat OR file is not readOnly → block
+					regs.Orig_rax = ^uint64(0)
+					regs.Rax = EPERM
+					_ = syscall.PtraceSetRegs(pid, &regs)
+					kg.Warnf("Denied %s %s (pattern match)\n", log.Operation, log.Resource)
+					log.Action = "Block"
+					log.Result = "Permission denied"
+				}
+				if pmatchedValue.Allow {
+					return
+				}
+			}
+		}
+
 		if t.Rules.FileWhiteListPosture && !match {
 			regs.Orig_rax = ^uint64(0)
 			regs.Rax = EPERM
 			_ = syscall.PtraceSetRegs(pid, &regs)
-			kg.Warnf("Denied %s % from source %s \n", log.Operation, log.Resource, log.Source)
+			kg.Warnf("Denied %s %s from source %s \n", log.Operation, log.Resource, log.Source)
 			log.Action = "Block"
 			log.Result = "Permission denied"
 		}
@@ -410,14 +544,21 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 		}]; ok {
 			match = false
 			if val.Dir {
-				match = true
-				if val.Recursive && !val.Hint {
-					matchedValue = val
-					return match, matchedValue
-				} else if val.Recursive && val.Hint {
+				if val.Recursive {
+					// Actual recursive directory rule.
+					if !val.Hint {
+						return true, val
+					}
 					hint = true
 					matchedValue = val
 				} else {
+					// Non-recursive directory rule.
+					// Only match direct children.
+					if len(paths)-i == 1 {
+						return true, val
+					}
+					// The target is deeper than a direct child,
+					// so this directory rule does not match it.
 					continue
 				}
 			}
@@ -426,11 +567,8 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 			}
 		}
 	}
-	if hint || match {
-		if hint {
-			match = true
-		}
-		return match, matchedValue
+	if hint {
+		return true, matchedValue
 	}
 
 	if val, ok := rules[InnerKey{
@@ -454,14 +592,21 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 		}]; ok {
 			match = false
 			if val.Dir {
-				match = true
-				if val.Recursive && !val.Hint {
-					matchedValue = val
-					return match, matchedValue
-				} else if val.Recursive && val.Hint {
+				if val.Recursive {
+					// Actual recursive directory rule.
+					if !val.Hint {
+						return true, val
+					}
 					hint = true
 					matchedValue = val
 				} else {
+					// Non-recursive directory rule.
+					// Only match direct children.
+					if len(paths)-i == 1 {
+						return true, val
+					}
+					// The target is deeper than a direct child,
+					// so this directory rule does not match it.
 					continue
 				}
 			}
@@ -470,12 +615,29 @@ func matchProcAndFileRules(path, source string, rules map[InnerKey]RuleConfig) (
 			}
 		}
 	}
-	if hint || match {
-		if hint {
-			match = true
-		}
-		return match, matchedValue
+	if hint {
+		return true, matchedValue
 	}
 
+	return false, RuleConfig{}
+}
+
+// matchPatternRules checks whether path matches any compiled pattern rule.
+// First match wins, consistent with matchProcAndFileRules priority ordering.
+//
+// This function is intentionally generic — it operates on []PatternRule so it
+// can be reused for both file and process matchPatterns without any changes:
+//
+//	// File patterns (current):
+//	pmatch, pval := matchPatternRules(log.Resource, t.Rules.FilePatternRules)
+//
+//	// Process patterns (future — add ProcessPatternRules []PatternRule to RuleSet):
+//	pmatch, pval := matchPatternRules(log.Resource, t.Rules.ProcessPatternRules)
+func matchPatternRules(path string, rules []PatternRule) (bool, RuleConfig) {
+	for _, pr := range rules {
+		if pr.Re.MatchString(path) {
+			return true, pr.Cfg
+		}
+	}
 	return false, RuleConfig{}
 }
