@@ -37,6 +37,10 @@ func (pe *PtraceEnforcer) StartSystemTracer() {
 			"openat",
 			"socket",
 			"execve",
+			"unlink",
+			"unlinkat",
+			"mknod",
+			"mknodat",
 		},
 		Default: libseccomp.ActionAllow,
 	}
@@ -307,10 +311,27 @@ func (t *Tracer) handle(pid int) {
 					log.Action = "Block"
 					log.Result = "Permission denied"
 				} else if fileOwnerUID >= 0 {
-					// Caller IS the file owner → allow, skip further deny checks
-					return
+					// check readOnly
+					if matchedValue.ReadOnly && !(regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+						// caller is file owner, but file is readOnly and the operation is not open/openat → block
+						regs.Orig_rax = ^uint64(0)
+						regs.Rax = EPERM
+						_ = syscall.PtraceSetRegs(pid, &regs)
+						kg.Warnf("Denied %s %s (readOnly: caller UID %d is file owner, but operation is not open/openat)\n", log.Operation, log.Resource, log.UID)
+						log.Action = "Block"
+						log.Result = "Permission denied"
+					} else {
+						// Caller IS the file owner, readOnly is false → allow, skip further deny checks
+						return
+					}
 				}
 			} else if matchedValue.Deny {
+				// file is readOnly and the operation is open/openat → allow
+				if matchedValue.ReadOnly && (regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+					return
+				}
+
+				// file is readOnly and the operation is not open/openat OR file is not readOnly → block
 				regs.Orig_rax = ^uint64(0)
 				regs.Rax = EPERM
 				_ = syscall.PtraceSetRegs(pid, &regs)
@@ -340,10 +361,27 @@ func (t *Tracer) handle(pid int) {
 						log.Action = "Block"
 						log.Result = "Permission denied"
 					} else if fileOwnerUID >= 0 {
-						// Caller IS the file owner → allow, skip further deny checks
-						return
+						// check readOnly
+						if pmatchedValue.ReadOnly && !(regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+							// caller is file owner, but file is readOnly and the operation is not open/openat → block
+							regs.Orig_rax = ^uint64(0)
+							regs.Rax = EPERM
+							_ = syscall.PtraceSetRegs(pid, &regs)
+							kg.Warnf("Denied %s %s (readOnly: caller UID %d is file owner, but operation is not open/openat)\n", log.Operation, log.Resource, log.UID)
+							log.Action = "Block"
+							log.Result = "Permission denied"
+						} else {
+							// Caller IS the file owner, readOnly is false → allow, skip further deny checks
+							return
+						}
 					}
 				} else if pmatchedValue.Deny {
+					// file is readOnly and the operation is open/openat → allow
+					if pmatchedValue.ReadOnly && (regs.Orig_rax == syscall.SYS_OPEN || regs.Orig_rax == syscall.SYS_OPENAT) {
+						return
+					}
+
+					// file is readOnly and the operation is not open/openat OR file is not readOnly → block
 					regs.Orig_rax = ^uint64(0)
 					regs.Rax = EPERM
 					_ = syscall.PtraceSetRegs(pid, &regs)
