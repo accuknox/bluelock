@@ -91,3 +91,49 @@ func TestGetFileOwnerUID(t *testing.T) {
 		}
 	})
 }
+
+// TestIsWriteAccess verifies the isWriteAccess helper that drives readOnly enforcement.
+// The logic mirrors KubeArmor BPF's lsm/file_permission hook.
+func TestIsWriteAccess(t *testing.T) {
+	tests := []struct {
+		name      string
+		syscallNr uint64
+		flags     int
+		want      bool
+	}{
+		// --- Syscalls that are always writes regardless of flags ---
+		{"unlink is always write", uint64(syscall.SYS_UNLINK), 0, true},
+		{"unlinkat is always write", uint64(syscall.SYS_UNLINKAT), 0, true},
+		{"mknod is always write", uint64(syscall.SYS_MKNOD), 0, true},
+		{"mknodat is always write", uint64(syscall.SYS_MKNODAT), 0, true},
+
+		// --- SYS_OPEN / SYS_OPENAT read-only access ---
+		{"open O_RDONLY is not write", uint64(syscall.SYS_OPEN), syscall.O_RDONLY, false},
+		{"openat O_RDONLY is not write", uint64(syscall.SYS_OPENAT), syscall.O_RDONLY, false},
+
+		// --- SYS_OPEN / SYS_OPENAT write-mode flags ---
+		{"open O_WRONLY is write", uint64(syscall.SYS_OPEN), syscall.O_WRONLY, true},
+		{"open O_RDWR is write", uint64(syscall.SYS_OPEN), syscall.O_RDWR, true},
+		{"open O_CREAT is write", uint64(syscall.SYS_OPEN), syscall.O_CREAT, true},
+		{"open O_TRUNC is write", uint64(syscall.SYS_OPEN), syscall.O_TRUNC, true},
+		{"open O_APPEND is write", uint64(syscall.SYS_OPEN), syscall.O_APPEND, true},
+		{"openat O_WRONLY is write", uint64(syscall.SYS_OPENAT), syscall.O_WRONLY, true},
+		{"openat O_RDWR is write", uint64(syscall.SYS_OPENAT), syscall.O_RDWR, true},
+
+		// --- Combination: read with extra non-write flags is not write ---
+		{"open O_RDONLY|O_CLOEXEC is not write", uint64(syscall.SYS_OPEN), syscall.O_RDONLY | syscall.O_CLOEXEC, false},
+
+		// --- Unknown syscall returns false ---
+		{"unknown syscall is not write", uint64(syscall.SYS_READ), 0, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := isWriteAccess(tt.syscallNr, tt.flags)
+			if got != tt.want {
+				t.Errorf("isWriteAccess(syscall=%d, flags=%#o) = %v, want %v",
+					tt.syscallNr, tt.flags, got, tt.want)
+			}
+		})
+	}
+}
