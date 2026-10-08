@@ -1,0 +1,13 @@
+apiVersion: security.kubearmor.com/v1
+kind: KubeArmorPolicy
+metadata:
+  name: bluelock-file-pattern-block
+  namespace: container_namespace
+spec:
+  selector:
+    matchLabels:
+      kubearmor.io/container.name: armored-container
+  file:
+    matchPatterns:
+    - pattern: ".*\\.log$"
+  action: Block

@@ -84,6 +84,38 @@ func absPath(pid int, p string) string {
 	return path.Clean(p)
 }
 
+func getFileOwnerUID(filePath string) int32 {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return -1
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		return -1
+	}
+	return int32(stat.Uid)
+}
+
+// isWriteAccess reports whether a file syscall carries write intent.
+//
+// This mirrors KubeArmor BPF's lsm/file_permission hook, which fires only
+// when mask & (MASK_WRITE | MASK_APPEND) is non-zero. Deletion and device
+// creation syscalls are unconditionally write operations. For open/openat,
+// the flags argument is inspected for any write-mode access bit.
+func isWriteAccess(syscallNr uint64, openFlags int) bool {
+	switch int(syscallNr) {
+	case syscall.SYS_UNLINK, syscall.SYS_UNLINKAT,
+		syscall.SYS_MKNOD, syscall.SYS_MKNODAT:
+		// Deletion and node-creation are always write operations.
+		return true
+	case syscall.SYS_OPEN, syscall.SYS_OPENAT:
+		const writeBits = syscall.O_WRONLY | syscall.O_RDWR |
+			syscall.O_CREAT | syscall.O_TRUNC | syscall.O_APPEND
+		return openFlags&writeBits != 0
+	}
+	return false
+}
+
 func clen(b []byte) int {
 	for i := 0; i < len(b); i++ {
 		if b[i] == 0 {
