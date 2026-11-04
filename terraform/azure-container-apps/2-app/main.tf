@@ -114,7 +114,7 @@ resource "azurerm_container_app" "this" {
 
     init_container {
       name   = "bluelock"
-      image  = "public.ecr.aws/k9v9d5v2/accuknox-bluelock/bluelock:latest"
+      image  = "public.ecr.aws/k9v9d5v2/accuknox-bluelock:v1.0.0"
       cpu    = 0.25
       memory = "0.5Gi"
 

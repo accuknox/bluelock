@@ -59,7 +59,7 @@ Modified Deployment:
               name: kubearmor-dir
       containers:
         - name: armored-container
-          image: daemon1024/ka-socat-demo
+          image: public.ecr.aws/k9v9d5v2/accuknox-bluelock/ka-socat-demo:latest
           imagePullPolicy: Always
           command: ["/kubearmor/bluelock","socat", "TCP-LISTEN:1337,reuseaddr,fork", "EXEC:bash,pty,stderr,setsid,sigint,sane"] ## Binary Accepts Container Commands as Argument
           ports:
@@ -133,7 +133,7 @@ kubectl apply -f https://raw.githubusercontent.com/accuknox/bluelock/refs/heads/
 
         - kArmor JSON
         ```json
-        {"Timestamp":1685073936,"UpdatedTime":"2023-05-26T04:05:36.097519Z","HostName":"armored-application-77fb54dc69-g4cgh","NamespaceName":"default","PodName":"armored-application-77fb54dc69-g4cgh","Labels":"eks.amazonaws.com/fargate-profile=fp-default,kubearmor.io/container.name=armored-container","ContainerID":"938e0b4bbdbc5c7f8cc1acb319ef59784d495e44b6f66fa41bd0c9180a52986e","ContainerName":"armored-container","ContainerImage":"docker.io/daemon1024/ka-socat-demo:latest@sha256:f6208198172cc4ed73e7f813a982b30221c5c8bb3bf587af16840055ac517fdd","PPID":31,"PID":34,"ParentProcessName":"/usr/bin/bash","ProcessName":"/usr/bin/head","PolicyName":"ksp-armored-lenient-allow-sa","Severity":"7","Tags":"NIST","ATags":["NIST"],"Message":"sa token malicious accessed ","Type":"MatchedPolicy","Source":"/usr/bin/head","Operation":"File","Resource":"/run/secrets/kubernetes.io/serviceaccount/token","Data":"syscall=openat fd=4294967196 flags=0 mode=0","Enforcer":"Ptrace enforcer","Action":"Block","Result":"Permission denied"}
+        {"Timestamp":1685073936,"UpdatedTime":"2023-05-26T04:05:36.097519Z","HostName":"armored-application-77fb54dc69-g4cgh","NamespaceName":"default","PodName":"armored-application-77fb54dc69-g4cgh","Labels":"eks.amazonaws.com/fargate-profile=fp-default,kubearmor.io/container.name=armored-container","ContainerID":"938e0b4bbdbc5c7f8cc1acb319ef59784d495e44b6f66fa41bd0c9180a52986e","ContainerName":"armored-container","ContainerImage":"public.ecr.aws/k9v9d5v2/accuknox-bluelock/ka-socat-demo:latest@sha256:f6208198172cc4ed73e7f813a982b30221c5c8bb3bf587af16840055ac517fdd","PPID":31,"PID":34,"ParentProcessName":"/usr/bin/bash","ProcessName":"/usr/bin/head","PolicyName":"ksp-armored-lenient-allow-sa","Severity":"7","Tags":"NIST","ATags":["NIST"],"Message":"sa token malicious accessed ","Type":"MatchedPolicy","Source":"/usr/bin/head","Operation":"File","Resource":"/run/secrets/kubernetes.io/serviceaccount/token","Data":"syscall=openat fd=4294967196 flags=0 mode=0","Enforcer":"Ptrace enforcer","Action":"Block","Result":"Permission denied"}
         ```
         - SaaS Alert
         ![](https://hackmd.io/_uploads/H1qTxhTr2.png)

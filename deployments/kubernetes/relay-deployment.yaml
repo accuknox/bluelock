@@ -33,7 +33,7 @@ spec:
       serviceAccountName: bluelock
       containers:
       - name: kubearmor-relay-server
-        image: delusionaloptimist/kubearmor-relay-server
+        image: kubearmor/kubearmor-relay-server:latest
         imagePullPolicy: Always
         ports:
         - containerPort: 32767
